@@ -9,7 +9,8 @@ use std::{
 use rattler_conda_types::Subdir;
 
 use super::{
-    add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+    add_trailing_slash, decode_verified_shard_async, is_missing_sharded_repodata_status,
+    parse_records,
 };
 use crate::{
     GatewayError, Reporter,
@@ -34,6 +35,13 @@ use url::Url;
 
 pub(crate) const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
+
+/// The directory inside the cache that holds decompressed shards, named
+/// `<sha256>.msgpack` after the hash of the compressed shard. The directory is
+/// shared by all channels, so a shard is only written after its compressed
+/// bytes were verified against that hash; files in it are trusted without
+/// verifying them again.
+const SHARDS_CACHE_DIR: &str = "shards-v1";
 
 /// How a [`ShardedSubdir`] may use its on-disk shard cache.
 #[derive(Debug, Clone, Copy)]
@@ -130,7 +138,7 @@ impl ShardedSubdir {
             })?;
 
         // Determine the cache directory and make sure it exists.
-        let cache_dir = cache_dir.join("shards-v1");
+        let cache_dir = cache_dir.join(SHARDS_CACHE_DIR);
         tokio_fs::create_dir_all(&cache_dir)
             .await
             .map_err(FetchRepoDataError::IoError)?;
@@ -225,6 +233,7 @@ impl SubdirClient for ShardedSubdir {
                     // Decode the cached shard
                     return parse_records(
                         cached_bytes,
+                        name.clone(),
                         self.channel.base_url.clone(),
                         self.package_base_url.clone(),
                     )
@@ -294,7 +303,7 @@ impl SubdirClient for ShardedSubdir {
             bytes
         };
 
-        let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
+        let shard_bytes = decode_verified_shard_async(shard_bytes, *shard, shard_url).await?;
 
         // Create a future to write the cached bytes to disk
         let write_to_cache_fut = write_shard_to_cache(shard_cache_path, shard_bytes.clone());
@@ -302,6 +311,7 @@ impl SubdirClient for ShardedSubdir {
         // Create a future to parse the records from the shard
         let parse_records_fut = parse_records(
             shard_bytes,
+            name.clone(),
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
         );

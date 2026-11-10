@@ -11,9 +11,14 @@ use rattler_conda_types::{
     ParseMatchSpecOptions, Subdir,
 };
 use rattler_config::{ConfigBase, NoExtension};
+use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile, PlatformData, PlatformName};
+use rattler_networking::LazyClient;
 use rattler_repodata_gateway::RepoData;
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
+use rattler_vfs::{
+    Mode, MountConfig, MountHandle, Transport, build_and_mount_with_client, force_unmount,
+};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
 use sha2::{Digest, Sha256};
 use std::{
@@ -70,13 +75,29 @@ pub struct Opt {
     pub force_reinstall: bool,
 
     /// Before executing the command, list packages in the environment
-    /// Specify `--list=some_regex` to filter the shown packages    
+    /// Specify `--list=some_regex` to filter the shown packages
     #[clap(long = "list", num_args = 0..=1, default_missing_value = "", require_equals = true)]
     pub list: Option<String>,
 
     /// Disable modification of PS1 to indicate the temporary environment.
     #[clap(long)]
     pub no_modify_ps1: bool,
+
+    /// Serve the environment through a virtual filesystem mount instead of
+    /// installing it to disk.
+    ///
+    /// The packages are served lazily from the shared package cache, so
+    /// nothing is extracted. This is faster for fresh environments and for
+    /// moderately sized environments that are only run a handful of times;
+    /// for environments that are reused often, the default on-disk install
+    /// is faster.
+    ///
+    /// Like an installed environment, the mount is writable and what programs
+    /// write into it persists across runs (kept in an overlay next to the
+    /// mount); `--force-reinstall` discards it. A run started while another
+    /// run of the same environment is active gets a read-only view.
+    #[clap(long)]
+    pub dematerialized: bool,
 }
 
 /// CLI entry point for `rattler exec`.
@@ -108,7 +129,6 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
         install_specs.push(guess_package_spec(command));
     }
 
-    // Locate / create the shared rattler cache
     let cache_dir = default_cache_dir()
         .map_err(|e| miette::miette!("could not determine cache directory: {}", e))?;
     rattler_cache::ensure_cache_dir(&cache_dir)
@@ -116,8 +136,11 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let dir_prefix = exec_dir_prefix(&install_specs, Some(command), should_guess);
 
-    // Solve + install (or reuse) the cached environment
-    let prefix = create_exec_prefix(CreateExecPrefixOptions {
+    // Solve the environment and either install it to disk (default) or, with
+    // `--dematerialized`, mount it as a virtual conda prefix served lazily from
+    // the shared package cache. A `mount` must stay alive until the
+    // child process exits; dropping it unmounts the prefix.
+    let (prefix, mount) = create_exec_prefix(CreateExecPrefixOptions {
         specs: &install_specs,
         channels: &channels,
         config: &config,
@@ -127,6 +150,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
         list: opt.list.as_deref(),
         cache_dir: &cache_dir,
         offline,
+        dematerialized: opt.dematerialized,
     })
     .await?;
 
@@ -179,6 +203,12 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
             .await
             .map_err(|e| miette::miette!("failed to execute '{}': {}", command, e))?;
 
+    // `std::process::exit` skips destructors, so the mount would leak (leaving a
+    // stale mount at the prefix) unless we tear it down explicitly here.
+    if let Some(mount) = mount {
+        mount.unmount().await?;
+    }
+
     std::process::exit(status.code().unwrap_or(1));
 }
 
@@ -192,10 +222,20 @@ struct CreateExecPrefixOptions<'a> {
     list: Option<&'a str>,
     cache_dir: &'a Path,
     offline: bool,
+    dematerialized: bool,
 }
 
-/// Creates a prefix for the `rattler exec` command.
-async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Result<PathBuf> {
+/// Solves (or reuses) an environment for `rattler exec`.
+///
+/// By default the environment is installed to an on-disk prefix (like
+/// `pixi exec`), and later runs reuse it as-is. With `dematerialized`, nothing
+/// is extracted: the packages are fetched into the shared package cache and
+/// served lazily through a [`rattler_vfs`] mount. In that case the returned
+/// [`ExecMount`] owns the live mount — keep it alive for as long as the
+/// prefix is in use and unmount it (or drop it) afterwards.
+async fn create_exec_prefix(
+    options: CreateExecPrefixOptions<'_>,
+) -> miette::Result<(PathBuf, Option<ExecMount>)> {
     let CreateExecPrefixOptions {
         specs,
         channels,
@@ -206,16 +246,103 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
         list,
         cache_dir,
         offline,
+        dematerialized,
     } = options;
     let channel_urls: Vec<String> = channels.iter().map(|c| c.base_url.to_string()).collect();
     let env_hash = compute_env_hash(specs, &channel_urls, platform);
 
-    let dir_name = match dir_prefix {
+    let mut dir_name = match dir_prefix {
         Some(ref p) => format!("{}-{}", p, &env_hash[..8]),
         None => env_hash[..16].to_string(),
     };
+    // Keep mounted and installed environments apart, so a mount never shadows
+    // an installed prefix (and vice versa).
+    if dematerialized {
+        dir_name.push_str("-vfs");
+    }
 
     let prefix = cache_dir.join(EXEC_ENVS_DIR).join(&dir_name);
+    let package_cache = PackageCache::new(cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR));
+
+    if dematerialized {
+        // The VFS mount has no persistent on-disk prefix, so we cache the
+        // solved lock file instead. On a warm run we skip repodata + solve
+        // entirely and mount straight from the cached lock file. The state
+        // lives next to the mount point, not inside it: while a mount is live
+        // the mount point shows the virtual environment, so a concurrent run
+        // could not see files stored in the directory underneath.
+        let state_dir = prefix;
+        let lockfile_path = state_dir.join("lock.yml");
+        // Earlier versions mounted the environment at what is now the state
+        // directory; a run of one of those that was killed leaves a dead mount
+        // here, which would make every file operation below fail.
+        clear_stale_mount(&state_dir);
+
+        let (lockfile, client): (LockFile, LazyClient) =
+            if lockfile_path.exists() && !force_reinstall {
+                tracing::info!(
+                    "reusing solved environment from {}",
+                    lockfile_path.display()
+                );
+                let lockfile = LockFile::from_path(&lockfile_path)
+                    .into_diagnostic()
+                    .context("failed to read cached lock file")?;
+                // Only needed when a package is missing from the cache, and
+                // creating it loads the system certificates, so defer it.
+                let client = LazyClient::new(move || {
+                    create_client_with_middleware(offline).unwrap_or_else(|e| {
+                        tracing::warn!("failed to create download client: {e:?}");
+                        reqwest_middleware::ClientWithMiddleware::default()
+                    })
+                });
+                (lockfile, client)
+            } else {
+                let (records, download_client) =
+                    solve_environment(specs, channels, config, platform, list, offline).await?;
+
+                // Turn the solved records into an in-memory lock file that
+                // `rattler_vfs` consumes. A single `default`
+                // environment/platform is enough here.
+                let lockfile = lockfile_from_records(&records, platform)
+                    .context("failed to build lock file from solved records")?;
+
+                // Persist the lock file so subsequent runs can reuse the solve.
+                // Written to a temporary file and renamed, so a concurrent run
+                // never reads a partial lock file.
+                std::fs::create_dir_all(&state_dir)
+                    .into_diagnostic()
+                    .context("failed to create environment directory")?;
+                let tmp_path = state_dir.join(format!("lock.yml.{}.tmp", std::process::id()));
+                lockfile
+                    .to_path(&tmp_path)
+                    .into_diagnostic()
+                    .context("failed to write cached lock file")?;
+                if let Err(e) = std::fs::rename(&tmp_path, &lockfile_path) {
+                    // On Windows the rename fails while a concurrent run has
+                    // the cached lock file open. That run wrote an equivalent
+                    // solve, so carry on with ours in memory.
+                    let _ = std::fs::remove_file(&tmp_path);
+                    if !lockfile_path.is_file() {
+                        return Err(e)
+                            .into_diagnostic()
+                            .context("failed to write cached lock file");
+                    }
+                    tracing::debug!("not replacing cached lock file: {e}");
+                }
+                (lockfile, download_client.into())
+            };
+
+        let mount = mount_prefix(MountPrefixOptions {
+            lockfile: &lockfile,
+            platform,
+            package_cache: &package_cache,
+            client,
+            state_dir: &state_dir,
+            fresh: force_reinstall,
+        })
+        .await?;
+        return Ok((mount.mount_point.clone(), Some(mount)));
+    }
 
     let sentinel = prefix.join(".exec-ready");
 
@@ -223,9 +350,57 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     // reinstallation, we can return early.
     if sentinel.exists() && !force_reinstall {
         tracing::info!("reusing existing environment in {}", prefix.display());
-        return Ok(prefix);
+        return Ok((prefix, None));
     }
 
+    let (records, download_client) =
+        solve_environment(specs, channels, config, platform, list, offline).await?;
+
+    tracing::info!(
+        "installing environment in {}",
+        dunce::canonicalize(&prefix)
+            .as_deref()
+            .unwrap_or(&prefix)
+            .display()
+    );
+
+    Installer::new()
+        .with_target_platform(platform)
+        .with_download_client(download_client)
+        .with_package_cache(package_cache)
+        .with_reporter(
+            IndicatifReporter::builder()
+                .with_multi_progress(global_multi_progress())
+                .clear_when_done(true)
+                .finish(),
+        )
+        .install(&prefix, records)
+        .await
+        .into_diagnostic()
+        .context("failed to install environment")?;
+
+    // Mark the environment as ready so future runs can skip solve+install.
+    std::fs::write(&sentinel, b"")
+        .into_diagnostic()
+        .context("failed to write sentinel file")?;
+
+    Ok((prefix, None))
+}
+
+/// Fetches repodata and solves `specs` for `platform`, optionally printing the
+/// solved environment. Returns the solved records and the download client so
+/// the caller can reuse it to fetch packages.
+async fn solve_environment(
+    specs: &[MatchSpec],
+    channels: &[Channel],
+    config: &ConfigBase<NoExtension>,
+    platform: Subdir,
+    list: Option<&str>,
+    offline: bool,
+) -> miette::Result<(
+    Vec<rattler_conda_types::RepoDataRecord>,
+    reqwest_middleware::ClientWithMiddleware,
+)> {
     let download_client = create_client_with_middleware(offline)?;
 
     let gateway = build_gateway(download_client.clone(), config, offline, true)?;
@@ -273,42 +448,331 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
         .into_diagnostic()
         .context("failed to solve environment")?;
 
-    // Solve the environment
-    tracing::info!(
-        "installing environment in {}",
-        dunce::canonicalize(&prefix)
-            .as_deref()
-            .unwrap_or(&prefix)
-            .display()
-    );
-
-    Installer::new()
-        .with_target_platform(platform)
-        .with_download_client(download_client)
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_reporter(
-            IndicatifReporter::builder()
-                .with_multi_progress(global_multi_progress())
-                .clear_when_done(true)
-                .finish(),
-        )
-        .install(&prefix, solved.records.clone())
-        .await
-        .into_diagnostic()
-        .context("failed to install environment")?;
-
-    // Mark the environment as ready so future runs can skip solve+install
-    std::fs::write(&sentinel, b"")
-        .into_diagnostic()
-        .context("failed to write sentinel file")?;
-
     if let Some(regex) = list {
         list_environment(specs, &solved.records, regex)?;
     }
 
-    Ok(prefix)
+    Ok((solved.records, download_client))
+}
+
+/// Builds an in-memory [`LockFile`] with a single `default` environment holding
+/// the solved conda records for `platform`.
+fn lockfile_from_records(
+    records: &[rattler_conda_types::RepoDataRecord],
+    platform: Subdir,
+) -> miette::Result<LockFile> {
+    let mut builder = LockFile::builder()
+        .with_platforms(vec![PlatformData {
+            name: PlatformName::from(&platform),
+            subdir: platform,
+            virtual_packages: Vec::new(),
+        }])
+        .into_diagnostic()?;
+    for record in records {
+        builder
+            .add_conda_package(
+                DEFAULT_ENVIRONMENT_NAME,
+                platform.as_str(),
+                record.clone().into(),
+            )
+            .into_diagnostic()?;
+    }
+    Ok(builder.finish())
+}
+
+/// Whether we should attempt to force-unmount `path` before mounting.
+///
+/// Returns `true` when `path` is a mount point (it lives on a different
+/// filesystem than its parent) or when its state can't be determined (a stat
+/// error can indicate a stale mount whose userspace server has died). Returns
+/// `false` for an ordinary or missing directory, so the common "nothing
+/// mounted" case skips the `umount` subprocess entirely.
+#[cfg(unix)]
+fn should_force_unmount(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(m) => m,
+        // Nothing there yet (first run): nothing to clean up.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return false,
+        // Ambiguous (possibly a stale/dead mount, which fails with ENOTCONN):
+        // fall back to cleanup.
+        Err(_) => return true,
+    };
+    match path.parent().and_then(|p| std::fs::metadata(p).ok()) {
+        Some(parent_meta) => meta.dev() != parent_meta.dev(),
+        None => false,
+    }
+}
+
+/// On non-Unix targets there is no cheap portable mount-point probe, so keep
+/// the previous always-attempt-cleanup behaviour.
+#[cfg(not(unix))]
+fn should_force_unmount(_path: &Path) -> bool {
+    true
+}
+
+/// A live `--dematerialized` environment. Keep it alive for as long as the
+/// prefix is in use, then call [`ExecMount::unmount`].
+struct ExecMount {
+    /// `None` once unmounted.
+    handle: Option<MountHandle>,
+    mount_point: PathBuf,
+    /// Exclusive lock on the mount point, held while it is mounted. A run
+    /// that finds the lock taken knows the mount is live (not stale) and
+    /// mounts elsewhere instead of tearing it down. Released before the lock
+    /// file is removed (Windows can't delete an open file).
+    lock: Option<std::fs::File>,
+    /// Whether the mount point is private to this run and should be removed
+    /// after unmounting.
+    ephemeral: bool,
+}
+
+impl ExecMount {
+    async fn unmount(mut self) -> miette::Result<()> {
+        if let Some(handle) = self.handle.take() {
+            handle
+                .unmount()
+                .await
+                .map_err(|e| miette::miette!("failed to unmount environment: {e}"))?;
+        }
+        self.remove_ephemeral_mount_point();
+        Ok(())
+    }
+
+    fn remove_ephemeral_mount_point(&mut self) {
+        if self.ephemeral {
+            self.ephemeral = false;
+            drop(self.lock.take());
+            remove_mount_point(&self.mount_point);
+        }
+    }
+}
+
+impl Drop for ExecMount {
+    /// Error paths drop the mount without calling [`ExecMount::unmount`]:
+    /// dropping the handle unmounts (best effort), then clean up as usual.
+    fn drop(&mut self) {
+        drop(self.handle.take());
+        self.remove_ephemeral_mount_point();
+    }
+}
+
+/// Remove an (unmounted) private mount point and its lock file.
+fn remove_mount_point(mount_point: &Path) {
+    #[cfg(windows)]
+    let removed = rattler_vfs::remove_projfs_root(mount_point);
+    #[cfg(not(windows))]
+    let removed = std::fs::remove_dir(mount_point);
+    if let Err(e) = removed {
+        tracing::debug!("failed to remove {}: {e}", mount_point.display());
+    }
+    let _ = std::fs::remove_file(mount_point.with_extension("lock"));
+}
+
+/// Detach a mount left at `path` by a run that was killed, if there is one.
+fn clear_stale_mount(path: &Path) {
+    if should_force_unmount(path) {
+        let _ = force_unmount(path, Transport::best());
+    }
+}
+
+/// Clean up the private `mnt-<pid>` mount points of runs that are gone: a
+/// private mount point whose lock nobody holds belonged to a run that was
+/// killed before it could remove it, and may still be a dead mount.
+fn sweep_stale_private_mount_points(state_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(state_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_private_lock = path.extension().is_some_and(|ext| ext == "lock")
+            && path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .and_then(|stem| stem.strip_prefix("mnt-"))
+                .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()));
+        if !is_private_lock {
+            continue;
+        }
+        let Ok(lock) = std::fs::OpenOptions::new().write(true).open(&path) else {
+            continue;
+        };
+        if lock.try_lock().is_err() {
+            continue; // in use by a live run
+        }
+        let mount_point = path.with_extension("");
+        clear_stale_mount(&mount_point);
+        drop(lock);
+        remove_mount_point(&mount_point);
+    }
+}
+
+/// Picks and locks the directory to mount the environment at.
+///
+/// Every run of the same environment uses `<state_dir>/mnt` when it is free.
+/// When another run currently holds it, this run mounts at a private
+/// `<state_dir>/mnt-<pid>` instead, so concurrent runs never unmount each
+/// other.
+fn claim_mount_point(state_dir: &Path) -> miette::Result<(PathBuf, std::fs::File, bool)> {
+    let try_claim = |name: &str| -> miette::Result<Option<(PathBuf, std::fs::File)>> {
+        let mount_point = state_dir.join(name);
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(mount_point.with_extension("lock"))
+            .into_diagnostic()
+            .context("failed to create mount lock")?;
+        match lock.try_lock() {
+            Ok(()) => Ok(Some((mount_point, lock))),
+            Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+            Err(std::fs::TryLockError::Error(e)) => Err(e)
+                .into_diagnostic()
+                .context("failed to lock mount point"),
+        }
+    };
+
+    std::fs::create_dir_all(state_dir)
+        .into_diagnostic()
+        .context("failed to create environment directory")?;
+    sweep_stale_private_mount_points(state_dir);
+    if let Some((mount_point, lock)) = try_claim("mnt")? {
+        return Ok((mount_point, lock, false));
+    }
+    let name = format!("mnt-{}", std::process::id());
+    match try_claim(&name)? {
+        Some((mount_point, lock)) => Ok((mount_point, lock, true)),
+        None => Err(miette::miette!(
+            "mount point {name} is locked by another process"
+        )),
+    }
+}
+
+struct MountPrefixOptions<'a> {
+    lockfile: &'a LockFile,
+    platform: Subdir,
+    package_cache: &'a PackageCache,
+    /// Used to download packages missing from the cache.
+    client: LazyClient,
+    /// Directory holding the environment's state and mount point(s).
+    state_dir: &'a Path,
+    /// Discard what earlier runs wrote into the environment.
+    fresh: bool,
+}
+
+/// Mounts `lockfile` below `state_dir` via `rattler_vfs`, returning the live
+/// mount. Clears any stale mount left behind by a previous crashed run first.
+async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMount> {
+    let MountPrefixOptions {
+        lockfile,
+        platform,
+        package_cache,
+        client,
+        state_dir,
+        fresh,
+    } = options;
+    let (mount_point, lock, ephemeral) = claim_mount_point(state_dir)?;
+
+    // A previous run that was killed (SIGKILL, power loss) can leave a stale
+    // mount at this path; clear it so the fresh mount can take over. We hold
+    // the mount point's lock, so a mount found here is never a live one. Only
+    // do this when the path actually looks mounted (or its state is
+    // ambiguous) — otherwise every invocation would spawn a pointless `umount`
+    // subprocess (adding latency + run-to-run jitter) and print a spurious
+    // "not currently mounted" error.
+    //
+    // This has to happen before creating the directory: a dead FUSE mount
+    // can't even be `stat`ed (ENOTCONN), so creating it would fail.
+    clear_stale_mount(&mount_point);
+
+    // The environment is writable, like an installed one: what programs
+    // write (Python rewriting stale bytecode, `pip install`, ...) persists
+    // across runs. On ProjFS the mount point itself holds those writes;
+    // elsewhere they go to an overlay next to it. A run that mounts at a
+    // private mount point (because another run holds the shared one) can't
+    // share the overlay and gets a read-only view instead.
+    let overlay_dir = state_dir.join("overlay");
+    if fresh && !ephemeral {
+        discard_writes(&mount_point, &overlay_dir);
+    }
+    std::fs::create_dir_all(&mount_point)
+        .into_diagnostic()
+        .context("failed to create mount point")?;
+    let mode = if ephemeral || cfg!(windows) {
+        // ProjFS has no read-only mode and falls through to writable.
+        Mode::ReadOnlyIfSupported
+    } else {
+        Mode::Writable {
+            overlay_dir: Some(overlay_dir.clone()),
+        }
+    };
+    // Identify the overlay by the packages it was made for, not the specs, so
+    // a re-solve that picks different packages starts from a clean overlay.
+    let env_hash = rattler_vfs::compute_env_hash(lockfile, DEFAULT_ENVIRONMENT_NAME, platform)
+        .map_err(|e| miette::miette!("failed to hash environment: {e}"))?;
+    let config = MountConfig::new(mount_point.clone(), Transport::best(), env_hash).with_mode(mode);
+
+    tracing::info!("mounting environment at {}", mount_point.display());
+    let mut retried = false;
+    let handle = loop {
+        match build_and_mount_with_client(
+            lockfile,
+            DEFAULT_ENVIRONMENT_NAME,
+            platform,
+            package_cache,
+            client.clone(),
+            &config,
+        )
+        .await
+        {
+            Ok(handle) => break handle,
+            // The overlay holds writes made on top of other packages: they
+            // could shadow files of the new ones, so start over without them.
+            Err(e)
+                if !retried
+                    && matches!(
+                        e.downcast_ref::<rattler_vfs::MountError>(),
+                        Some(rattler_vfs::MountError::OverlayEnvHashMismatch { .. })
+                    ) =>
+            {
+                tracing::info!("environment changed; discarding its earlier writes");
+                discard_writes(&mount_point, &overlay_dir);
+                std::fs::create_dir_all(&mount_point)
+                    .into_diagnostic()
+                    .context("failed to create mount point")?;
+                retried = true;
+            }
+            Err(e) => return Err(miette::miette!("failed to mount environment: {e}")),
+        }
+    };
+
+    Ok(ExecMount {
+        handle: Some(handle),
+        mount_point,
+        lock: Some(lock),
+        ephemeral,
+    })
+}
+
+/// Remove what earlier runs wrote into the environment (it must not be
+/// mounted): the overlay, or on `ProjFS` the mount point holding the writes.
+fn discard_writes(mount_point: &Path, overlay_dir: &Path) {
+    #[cfg(windows)]
+    let removed = {
+        let _ = overlay_dir;
+        rattler_vfs::remove_projfs_root(mount_point).map_err(std::io::Error::other)
+    };
+    #[cfg(not(windows))]
+    let removed = {
+        let _ = mount_point;
+        match std::fs::remove_dir_all(overlay_dir) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
+    };
+    if let Err(e) = removed {
+        tracing::warn!("failed to discard earlier writes to the environment: {e}");
+    }
 }
 
 fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {

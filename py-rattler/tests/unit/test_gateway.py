@@ -196,7 +196,7 @@ def test_init_per_channel_config_key() -> None:
     # per_channel_config uses a Channel object as the key — this is what caused the original bug
     per_channel_config = {channel: test_source_config}
     with pytest.raises(TypeError):
-        Gateway(per_channel_config=per_channel_config)  # type: ignore[arg-type]
+        Gateway(per_channel_config=per_channel_config)  # ty: ignore[invalid-argument-type]
 
     # build right config & make sure gateway object initializes
     right_config = {"http://test-config-key.com": test_source_config}

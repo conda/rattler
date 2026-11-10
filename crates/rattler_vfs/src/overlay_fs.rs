@@ -4,7 +4,6 @@
 //! directory for copy-on-write semantics. Implements the same `VfsOps` trait
 //! so it can be used interchangeably with the read-only VFS.
 
-use libc::{EIO, ENOENT};
 use std::{
     collections::HashMap,
     ffi::{OsStr, OsString},
@@ -19,9 +18,69 @@ use std::{
 
 mod inode;
 
-use crate::overlay::{OverlayState, STATE_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME};
-use crate::vfs_ops::{ContentSource, DirEntry, FileAttr, FileKind, VfsOps, set_file_permissions};
+use crate::overlay::{
+    OverlayState, STATE_FILENAME, STATE_JOURNAL_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME,
+};
+use crate::vfs_ops::{
+    ContentSource, DirEntry, Fh, FileAttr, FileKind, VfsError, VfsOps, set_file_permissions,
+};
 use inode::{ResolvedIno, UPPER_INODE_BASE, UpperInodeMap};
+
+/// Reject a wire filename that is not a single, safe path component.
+///
+/// Transport adapters (NFS in particular) hand us filenames straight off the
+/// wire. NFS `AUTH_UNIX` is unauthenticated and the protocol does not stop a
+/// client from sending a multi-component or `..` name, so without this check a
+/// request such as `CREATE(dir, "../../../home/user/.bashrc")` would escape the
+/// overlay directory once joined onto the on-disk upper path. Every name that
+/// reaches a `parent_path.join(name)` must pass through here first.
+///
+/// A valid component is non-empty, is neither `.` nor `..`, and contains no NUL
+/// byte or path separator (`/` always; `\` additionally on Windows). Violations
+/// return `VfsError::InvalidArgument`.
+fn validate_component(name: &OsStr) -> Result<(), VfsError> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(VfsError::InvalidArgument);
+    }
+    let bytes = name.as_encoded_bytes();
+    let has_separator = bytes
+        .iter()
+        .any(|&b| b == b'/' || (cfg!(windows) && b == b'\\'));
+    if has_separator || bytes.contains(&0) {
+        return Err(VfsError::InvalidArgument);
+    }
+    Ok(())
+}
+
+/// Join a validated single-component `name` onto `parent_path`.
+///
+/// Central guard against path-traversal via untrusted wire filenames — see
+/// [`validate_component`].
+fn child_path(parent_path: &Path, name: &OsStr) -> Result<PathBuf, VfsError> {
+    validate_component(name)?;
+    Ok(parent_path.join(name))
+}
+
+/// Create a symlink at `link` pointing to `target`, cross-platform.
+#[cfg(unix)]
+fn symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+/// Create a symlink at `link` pointing to `target`, cross-platform.
+///
+/// Windows requires choosing the symlink kind up front. Resolve the target
+/// relative to the link's parent and pick a directory symlink when it points
+/// at a directory, falling back to a file symlink (also for dangling targets).
+#[cfg(not(unix))]
+fn symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    let resolved = link.parent().map(|p| p.join(target));
+    if resolved.is_some_and(|t| t.is_dir()) {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+}
 
 /// A writable overlay filesystem that wraps a read-only lower layer.
 pub struct OverlayFS<T: VfsOps> {
@@ -31,12 +90,25 @@ pub struct OverlayFS<T: VfsOps> {
     overlay_dir: PathBuf,
     upper_inodes: Mutex<UpperInodeMap>,
     lower_ino_cache: Mutex<HashMap<PathBuf, u64>>,
-    open_files: Mutex<HashMap<u64, File>>,
+    open_files: Mutex<HashMap<Fh, File>>,
     next_fh: AtomicU64,
     /// Lower inodes promoted to upper layer via rename or `open_write` COW.
     /// Maps `lower_ino` → `upper_ino` so the kernel's cached handle still works.
     promoted: Mutex<HashMap<u64, u64>>,
+    /// Serializes operations that change the upper layer. Several of them
+    /// check the upper layer and then act on it (e.g. copy-up: "not in upper
+    /// yet, so copy it"), which two concurrent requests for the same file
+    /// would interleave. Reads don't take it: copy-ups are staged and
+    /// renamed into place, so a reader sees either the lower or the complete
+    /// upper file.
+    mutation: Mutex<()>,
+    /// Counter for staging file names in [`COW_STAGING_DIRNAME`].
+    next_staging: AtomicU64,
 }
+
+/// Directory inside the overlay where copy-ups are written before being
+/// renamed into place. Hidden from listings and emptied when mounting.
+pub(crate) const COW_STAGING_DIRNAME: &str = ".rattler_vfs_cow";
 
 impl<T: VfsOps> OverlayFS<T> {
     /// Wrap a lower VFS with a pre-loaded overlay state.
@@ -61,8 +133,12 @@ impl<T: VfsOps> OverlayFS<T> {
             open_files: Mutex::new(HashMap::new()),
             next_fh: AtomicU64::new(1),
             promoted: Mutex::new(HashMap::new()),
+            mutation: Mutex::new(()),
+            next_staging: AtomicU64::new(0),
         };
 
+        // Leftovers of copy-ups interrupted by a crash.
+        let _ = fs::remove_dir_all(overlay_dir.join(COW_STAGING_DIRNAME));
         overlay.scan_upper(&overlay_dir)?;
         Ok(overlay)
     }
@@ -100,7 +176,12 @@ impl<T: VfsOps> OverlayFS<T> {
             let name = path.file_name().unwrap_or_default();
 
             // Skip overlay internal files
-            if name == STATE_FILENAME || name == STATE_TMP_FILENAME || name == STATE_LOCK_FILENAME {
+            if name == STATE_FILENAME
+                || name == STATE_TMP_FILENAME
+                || name == STATE_LOCK_FILENAME
+                || name == STATE_JOURNAL_FILENAME
+                || name == COW_STAGING_DIRNAME
+            {
                 continue;
             }
 
@@ -129,14 +210,14 @@ impl<T: VfsOps> OverlayFS<T> {
         self.overlay_dir.join(virtual_path)
     }
 
-    fn resolve_path(&self, parent: u64, name: &OsStr) -> Result<PathBuf, i32> {
+    fn resolve_path(&self, parent: u64, name: &OsStr) -> Result<PathBuf, VfsError> {
         let parent_path = match self.resolve_ino(parent)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
         };
-        Ok(parent_path.join(name))
+        child_path(&parent_path, name)
     }
 
-    fn resolve_ino(&self, ino: u64) -> Result<ResolvedIno, i32> {
+    fn resolve_ino(&self, ino: u64) -> Result<ResolvedIno, VfsError> {
         // Check if this lower inode was promoted to upper via rename or COW
         let effective = if ino < UPPER_INODE_BASE {
             self.promoted.lock().unwrap().get(&ino).copied()
@@ -152,7 +233,7 @@ impl<T: VfsOps> OverlayFS<T> {
                     "overlay resolve_ino: upper ino={} not found in inode map",
                     effective_ino
                 );
-                ENOENT
+                VfsError::NotFound
             })?;
             Ok(ResolvedIno::Upper(path))
         } else {
@@ -212,13 +293,13 @@ impl<T: VfsOps> OverlayFS<T> {
         Some(current_ino)
     }
 
-    fn make_upper_attr(&self, path: &Path, ino: u64) -> Result<FileAttr, i32> {
+    fn make_upper_attr(&self, path: &Path, ino: u64) -> Result<FileAttr, VfsError> {
         let full_path = self.upper_path(path);
-        let metadata = fs::symlink_metadata(&full_path).map_err(|_e| ENOENT)?;
+        let metadata = fs::symlink_metadata(&full_path).map_err(|_e| VfsError::NotFound)?;
         Ok(FileAttr::from_metadata(&metadata, ino))
     }
 
-    fn ensure_upper_parent(&self, virtual_path: &Path) -> Result<(), i32> {
+    fn ensure_upper_parent(&self, virtual_path: &Path) -> Result<(), VfsError> {
         if let Some(parent) = virtual_path.parent() {
             fs::create_dir_all(self.upper_path(parent)).map_err(|e| {
                 tracing::warn!(
@@ -226,50 +307,94 @@ impl<T: VfsOps> OverlayFS<T> {
                     virtual_path,
                     e
                 );
-                EIO
+                VfsError::Io
             })?;
         }
         Ok(())
     }
 
-    fn copy_to_upper(&self, virtual_path: &Path, lower_ino: u64) -> Result<PathBuf, i32> {
+    fn copy_to_upper(&self, virtual_path: &Path, lower_ino: u64) -> Result<PathBuf, VfsError> {
         self.ensure_upper_parent(virtual_path)?;
         let upper_path = self.upper_path(virtual_path);
 
-        if upper_path.exists() {
-            return Ok(upper_path);
-        }
+        let lower_attr = self.lower.getattr(lower_ino).ok();
+        let lower_kind = lower_attr.as_ref().map(|a| a.kind);
 
-        // Check if this is a directory — directories need recursive COW
-        if let Ok(attr) = self.lower.getattr(lower_ino)
-            && attr.kind == FileKind::Directory
-        {
+        // Directories need recursive COW so every lower-only child is
+        // materialized. This must run *before* the "already in upper" short
+        // circuit below: a partially-materialized upper directory still has to
+        // be recursed into, otherwise a later rename drops the lower-only
+        // children and a whiteout permanently hides the originals.
+        if lower_kind == Some(FileKind::Directory) {
             return self.copy_dir_to_upper(virtual_path, lower_ino);
         }
 
-        if let Ok(ContentSource::Direct(source)) = self.lower.content_source(lower_ino) {
-            reflink_copy::reflink_or_copy(&source, &upper_path).map_err(|e| {
-                tracing::warn!("COW copy failed {:?} -> {:?}: {}", source, upper_path, e);
-                EIO
+        // A non-directory already present in upper has been copied up already.
+        // Use symlink_metadata so an existing (possibly dangling) symlink is
+        // recognised rather than followed.
+        if upper_path.symlink_metadata().is_ok() {
+            return Ok(upper_path);
+        }
+
+        // Symlinks must be recreated as symlinks. Reading a symlink through the
+        // VFS returns no bytes, so the old fall-through wrote a 0-byte regular
+        // file that permanently shadowed the real link — corrupting the many
+        // `libfoo.so -> libfoo.so.1` links a conda env is full of.
+        if lower_kind == Some(FileKind::Symlink) {
+            let target = self.lower.readlink(lower_ino)?;
+            symlink(&target, &upper_path).map_err(|e| {
+                tracing::warn!("COW symlink failed {:?} -> {:?}: {}", upper_path, target, e);
+                VfsError::Io
             })?;
+            return Ok(upper_path);
+        }
+
+        // Copy into a staging file and rename it into place, so a concurrent
+        // reader never sees a partially copied upper file.
+        let staging_dir = self.overlay_dir.join(COW_STAGING_DIRNAME);
+        fs::create_dir_all(&staging_dir).map_err(|e| {
+            tracing::warn!("failed to create {:?}: {}", staging_dir, e);
+            VfsError::Io
+        })?;
+        let staging = staging_dir.join(
+            self.next_staging
+                .fetch_add(1, Ordering::Relaxed)
+                .to_string(),
+        );
+        let copied = if let Ok(ContentSource::Direct(source)) = self.lower.content_source(lower_ino)
+        {
+            reflink_copy::reflink_or_copy(&source, &staging).map(|_| ())
         } else {
             // Transformed or Virtual — read all content via the VFS
             let data = self.lower.read(lower_ino, 0, u32::MAX)?;
-            fs::write(&upper_path, &data).map_err(|e| {
-                tracing::warn!("COW write failed {:?}: {}", upper_path, e);
-                EIO
-            })?;
+            fs::write(&staging, &data)
+        };
+        // Preserve the source's permission bits. `fs::write` creates 0644 and
+        // reflink/copy does not reliably carry the mode across platforms, so an
+        // executable such as `bin/python` would otherwise come up non-executable
+        // after a `chmod`/`mv`/truncate and fail to run.
+        let copied = copied.and_then(|()| {
+            if let Some(attr) = &lower_attr {
+                set_file_permissions(&staging, u32::from(attr.perm)).ok();
+            }
+            fs::rename(&staging, &upper_path)
+        });
+        if let Err(e) = copied {
+            let _ = fs::remove_file(&staging);
+            tracing::warn!("COW copy to {:?} failed: {}", upper_path, e);
+            return Err(VfsError::Io);
         }
+
         Ok(upper_path)
     }
 
     /// Recursively copy a lower-layer directory and all its visible children
     /// to the upper layer. Used when renaming a directory from lower to upper.
-    fn copy_dir_to_upper(&self, virtual_path: &Path, lower_ino: u64) -> Result<PathBuf, i32> {
+    fn copy_dir_to_upper(&self, virtual_path: &Path, lower_ino: u64) -> Result<PathBuf, VfsError> {
         let upper_path = self.upper_path(virtual_path);
         fs::create_dir_all(&upper_path).map_err(|e| {
             tracing::warn!("COW mkdir failed {:?}: {}", upper_path, e);
-            EIO
+            VfsError::Io
         })?;
 
         let state = self.state.lock().unwrap();
@@ -293,20 +418,20 @@ impl<T: VfsOps> OverlayFS<T> {
 }
 
 impl<T: VfsOps> VfsOps for OverlayFS<T> {
-    fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, i32> {
+    fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, VfsError> {
         let parent_path = match self.resolve_ino(parent)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
         };
-        let virtual_path = parent_path.join(name);
+        let virtual_path = child_path(&parent_path, name)?;
 
         // Single state lock: check whiteout and opaque in one acquisition
         {
             let state = self.state.lock().unwrap();
             if state.is_whiteout(&virtual_path) {
-                return Err(ENOENT);
+                return Err(VfsError::NotFound);
             }
             if state.is_opaque(&parent_path) {
-                return Err(ENOENT);
+                return Err(VfsError::NotFound);
             }
         }
 
@@ -328,11 +453,11 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
             }
             result
         } else {
-            Err(ENOENT)
+            Err(VfsError::NotFound)
         }
     }
 
-    fn getattr(&self, ino: u64) -> Result<FileAttr, i32> {
+    fn getattr(&self, ino: u64) -> Result<FileAttr, VfsError> {
         match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 // Try upper first, fall through to lower if it's just a structural dir
@@ -342,7 +467,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                         if let Some(lower_ino) = self.lower_ino_for_path(&path) {
                             self.lower.getattr(lower_ino)
                         } else {
-                            Err(ENOENT)
+                            Err(VfsError::NotFound)
                         }
                     }
                 }
@@ -351,25 +476,26 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         }
     }
 
-    fn readlink(&self, ino: u64) -> Result<PathBuf, i32> {
+    fn readlink(&self, ino: u64) -> Result<PathBuf, VfsError> {
         match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 let full = self.upper_path(&path);
-                fs::read_link(&full).map_err(|_e| EIO)
+                fs::read_link(&full).map_err(|_e| VfsError::Io)
             }
             ResolvedIno::Lower(lower_ino, _) => self.lower.readlink(lower_ino),
         }
     }
 
-    fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
+    fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
         match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 let full = self.upper_path(&path);
                 if full.exists() && !full.is_dir() {
-                    let mut file = File::open(&full).map_err(|_e| EIO)?;
-                    file.seek(SeekFrom::Start(offset)).map_err(|_e| EIO)?;
+                    let mut file = File::open(&full).map_err(|_e| VfsError::Io)?;
+                    file.seek(SeekFrom::Start(offset))
+                        .map_err(|_e| VfsError::Io)?;
                     let mut buf = vec![0u8; size as usize];
-                    let n = file.read(&mut buf).map_err(|_e| EIO)?;
+                    let n = file.read(&mut buf).map_err(|_e| VfsError::Io)?;
                     buf.truncate(n);
                     return Ok(buf);
                 }
@@ -377,14 +503,14 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 if let Some(lower_ino) = self.lower_ino_for_path(&path) {
                     self.lower.read(lower_ino, offset, size)
                 } else {
-                    Err(ENOENT)
+                    Err(VfsError::NotFound)
                 }
             }
             ResolvedIno::Lower(lower_ino, _) => self.lower.read(lower_ino, offset, size),
         }
     }
 
-    fn content_source(&self, ino: u64) -> Result<ContentSource, i32> {
+    fn content_source(&self, ino: u64) -> Result<ContentSource, VfsError> {
         match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 let full = self.upper_path(&path);
@@ -393,21 +519,22 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 } else if let Some(lower_ino) = self.lower_ino_for_path(&path) {
                     self.lower.content_source(lower_ino)
                 } else {
-                    Err(ENOENT)
+                    Err(VfsError::NotFound)
                 }
             }
             ResolvedIno::Lower(lower_ino, _) => self.lower.content_source(lower_ino),
         }
     }
 
-    fn open_write(&self, ino: u64) -> Result<u64, i32> {
+    fn open_write(&self, ino: u64) -> Result<Fh, VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let (virtual_path, needs_cow_from) = match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 let p = self.upper_path(&path);
                 if p.exists() {
                     (path, None)
                 } else {
-                    let li = self.lower_ino_for_path(&path).ok_or(ENOENT)?;
+                    let li = self.lower_ino_for_path(&path).ok_or(VfsError::NotFound)?;
                     (path, Some(li))
                 }
             }
@@ -431,28 +558,29 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
             .open(&upper_path)
             .map_err(|e| {
                 tracing::warn!("overlay open write failed {:?}: {}", upper_path, e);
-                EIO
+                VfsError::Io
             })?;
-        let fh = self.next_fh.fetch_add(1, Ordering::Relaxed);
+        let fh = Fh(self.next_fh.fetch_add(1, Ordering::Relaxed));
         self.open_files.lock().unwrap().insert(fh, file);
         Ok(fh)
     }
 
-    fn read_handle(&self, fh: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
+    fn read_handle(&self, fh: Fh, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
         let mut files = self.open_files.lock().unwrap();
-        let file = files.get_mut(&fh).ok_or(EIO)?;
-        file.seek(SeekFrom::Start(offset)).map_err(|_e| EIO)?;
+        let file = files.get_mut(&fh).ok_or(VfsError::Io)?;
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|_e| VfsError::Io)?;
         let mut buf = vec![0u8; size as usize];
-        let n = file.read(&mut buf).map_err(|_e| EIO)?;
+        let n = file.read(&mut buf).map_err(|_e| VfsError::Io)?;
         buf.truncate(n);
         Ok(buf)
     }
 
-    fn release_write(&self, fh: u64) {
+    fn release_write(&self, fh: Fh) {
         self.open_files.lock().unwrap().remove(&fh);
     }
 
-    fn readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, i32> {
+    fn readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, VfsError> {
         let (dir_path, lower_dir_ino) = match self.resolve_ino(ino)? {
             ResolvedIno::Upper(p) => {
                 let li = self.lower_ino_for_path(&p);
@@ -495,6 +623,8 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 let name = entry.file_name();
                 if name == STATE_FILENAME
                     || name == STATE_LOCK_FILENAME
+                    || name == STATE_JOURNAL_FILENAME
+                    || name == COW_STAGING_DIRNAME
                     || name.to_str().is_some_and(|s| s.ends_with(".tmp"))
                 {
                     continue;
@@ -545,7 +675,8 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         Ok(result)
     }
 
-    fn create(&self, parent: u64, name: &OsStr, mode: u32) -> Result<(FileAttr, u64), i32> {
+    fn create(&self, parent: u64, name: &OsStr, mode: u32) -> Result<(FileAttr, Fh), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name).inspect_err(|&e| {
             tracing::warn!(
                 "overlay create: resolve_path failed for parent={} name={:?}: errno={}",
@@ -571,7 +702,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
             .open(&upper_path)
             .map_err(|e| {
                 tracing::warn!("create failed {:?}: {}", upper_path, e);
-                EIO
+                VfsError::Io
             })?;
         set_file_permissions(&upper_path, mode).ok();
 
@@ -585,23 +716,23 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                     virtual_path,
                     e
                 );
-                EIO
+                VfsError::Io
             })?;
 
         let ino = self.assign_upper_ino(virtual_path.clone());
         let attr = self.make_upper_attr(&virtual_path, ino)?;
 
-        let fh = self.next_fh.fetch_add(1, Ordering::Relaxed);
+        let fh = Fh(self.next_fh.fetch_add(1, Ordering::Relaxed));
         self.open_files.lock().unwrap().insert(fh, file);
 
         Ok((attr, fh))
     }
 
-    fn write(&self, fh: u64, offset: u64, data: &[u8]) -> Result<u32, i32> {
+    fn write(&self, fh: Fh, offset: u64, data: &[u8]) -> Result<u32, VfsError> {
         let mut files = self.open_files.lock().unwrap();
         let file = files.get_mut(&fh).ok_or_else(|| {
             tracing::warn!("overlay write: fh={} not found in open_files", fh);
-            EIO
+            VfsError::Io
         })?;
         file.seek(SeekFrom::Start(offset)).map_err(|e| {
             tracing::warn!(
@@ -610,22 +741,23 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 offset,
                 e
             );
-            EIO
+            VfsError::Io
         })?;
         file.write_all(data).map_err(|e| {
             tracing::warn!("overlay write: write failed fh={}: {}", fh, e);
-            EIO
+            VfsError::Io
         })?;
         Ok(data.len() as u32)
     }
 
-    fn unlink(&self, parent: u64, name: &OsStr) -> Result<(), i32> {
+    fn unlink(&self, parent: u64, name: &OsStr) -> Result<(), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name)?;
         let upper_path = self.upper_path(&virtual_path);
 
         // If this is a lower-layer directory with visible children, reject.
         // The NFS server routes both REMOVE and RMDIR through unlink, so we
-        // must enforce ENOTEMPTY here as well as in rmdir.
+        // must enforce VfsError::NotEmpty here as well as in rmdir.
         if let Some(lower_ino) = self.lower_ino_for_path(&virtual_path)
             && let Ok(attr) = self.lower.getattr(lower_ino)
             && attr.kind == FileKind::Directory
@@ -639,7 +771,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                     !state.is_whiteout(&virtual_path.join(&e.name))
                 });
                 if has_visible {
-                    return Err(libc::ENOTEMPTY);
+                    return Err(VfsError::NotEmpty);
                 }
             }
         }
@@ -647,7 +779,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         // Remove from upper if present (ignore NotFound).
         // The NFS server routes both REMOVE and RMDIR through this function,
         // so handle both files and directories. Try remove_file first; on
-        // failure (EPERM on macOS, EISDIR on Linux) fall back to remove_dir.
+        // failure (VfsError::NotPermitted on macOS, VfsError::IsADirectory on Linux) fall back to remove_dir.
         if let Err(e) = fs::remove_file(&upper_path)
             && e.kind() != std::io::ErrorKind::NotFound
             && let Err(e2) = fs::remove_dir(&upper_path)
@@ -659,7 +791,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 e,
                 e2
             );
-            return Err(e2.raw_os_error().unwrap_or(EIO));
+            return Err(e2.raw_os_error().map_or(VfsError::Io, VfsError::from_errno));
         }
 
         // Only whiteout if the file exists in the lower layer — no point tracking
@@ -669,30 +801,33 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 .lock()
                 .unwrap()
                 .add_whiteout(virtual_path)
-                .map_err(|_e| EIO)?;
+                .map_err(|_e| VfsError::Io)?;
         }
 
         Ok(())
     }
 
-    fn mkdir(&self, parent: u64, name: &OsStr, mode: u32) -> Result<FileAttr, i32> {
+    fn mkdir(&self, parent: u64, name: &OsStr, mode: u32) -> Result<FileAttr, VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name)?;
         let upper_path = self.upper_path(&virtual_path);
 
         fs::create_dir_all(&upper_path).map_err(|e| {
             tracing::warn!("mkdir failed {:?}: {}", upper_path, e);
-            EIO
+            VfsError::Io
         })?;
         set_file_permissions(&upper_path, mode).ok();
 
         // Only mark opaque if previously whiteout'd (rmdir + mkdir pattern)
         let mut state = self.state.lock().unwrap();
         let was_whiteoutd = state.is_whiteout(&virtual_path);
-        state.remove_whiteout(&virtual_path).map_err(|_e| EIO)?;
+        state
+            .remove_whiteout(&virtual_path)
+            .map_err(|_e| VfsError::Io)?;
         if was_whiteoutd && self.lower_ino_for_path(&virtual_path).is_some() {
             state
                 .add_opaque_dir(virtual_path.clone())
-                .map_err(|_e| EIO)?;
+                .map_err(|_e| VfsError::Io)?;
         }
         drop(state);
 
@@ -700,7 +835,8 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         self.make_upper_attr(&virtual_path, ino)
     }
 
-    fn rmdir(&self, parent: u64, name: &OsStr) -> Result<(), i32> {
+    fn rmdir(&self, parent: u64, name: &OsStr) -> Result<(), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name)?;
         let upper_path = self.upper_path(&virtual_path);
 
@@ -718,7 +854,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                     !state.is_whiteout(&virtual_path.join(&e.name))
                 });
                 if has_visible {
-                    return Err(libc::ENOTEMPTY);
+                    return Err(VfsError::NotEmpty);
                 }
             }
         }
@@ -727,7 +863,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
             && e.kind() != std::io::ErrorKind::NotFound
         {
             tracing::warn!("rmdir failed {:?}: {}", upper_path, e);
-            return Err(EIO);
+            return Err(VfsError::Io);
         }
 
         if self.lower_ino_for_path(&virtual_path).is_some() {
@@ -735,7 +871,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 .lock()
                 .unwrap()
                 .add_whiteout(virtual_path)
-                .map_err(|_e| EIO)?;
+                .map_err(|_e| VfsError::Io)?;
         }
 
         Ok(())
@@ -748,17 +884,18 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         newparent: u64,
         newname: &OsStr,
         flags: u32,
-    ) -> Result<(), i32> {
+    ) -> Result<(), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         // Handle RENAME_NOREPLACE: fail if destination exists
         #[cfg(target_os = "linux")]
         if flags & libc::RENAME_NOREPLACE != 0 {
             let dst_check = self.resolve_path(newparent, newname)?;
             if self.upper_path(&dst_check).exists() {
-                return Err(libc::EEXIST);
+                return Err(VfsError::AlreadyExists);
             }
             let state = self.state.lock().unwrap();
             if !state.is_whiteout(&dst_check) && self.lower_ino_for_path(&dst_check).is_some() {
-                return Err(libc::EEXIST);
+                return Err(VfsError::AlreadyExists);
             }
         }
         // Suppress unused warning on non-Linux
@@ -801,14 +938,16 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
             }
             fs::rename(&upper_src, &upper_dst).map_err(|e| {
                 tracing::warn!("rename failed {:?} -> {:?}: {}", upper_src, upper_dst, e);
-                EIO
+                VfsError::Io
             })?;
         } else {
             // Source is in lower — COW then move
             let parent_path = match self.resolve_ino(parent)? {
                 ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
             };
-            let lower_parent_ino = self.lower_ino_for_path(&parent_path).ok_or(ENOENT)?;
+            let lower_parent_ino = self
+                .lower_ino_for_path(&parent_path)
+                .ok_or(VfsError::NotFound)?;
             let attr = self.lower.lookup(lower_parent_ino, name)?;
             self.copy_to_upper(&src_path, attr.ino)?;
             fs::rename(&upper_src, &upper_dst).map_err(|e| {
@@ -818,7 +957,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                     upper_dst,
                     e
                 );
-                EIO
+                VfsError::Io
             })?;
 
             // Promote: the kernel holds the lower inode for the source file.
@@ -832,17 +971,15 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         let src_in_lower = self.lower_ino_for_path(&src_path).is_some();
         let mut state = self.state.lock().unwrap();
         let dst_whiteoutd = state.is_whiteout(&dst_path);
-        let mut dirty = false;
         if src_in_lower {
-            state.whiteouts.insert(src_path.clone());
-            dirty = true;
+            state
+                .add_whiteout(src_path.clone())
+                .map_err(|_e| VfsError::Io)?;
         }
         if dst_whiteoutd {
-            state.whiteouts.remove(&dst_path);
-            dirty = true;
-        }
-        if dirty {
-            state.flush().map_err(|_e| EIO)?;
+            state
+                .remove_whiteout(&dst_path)
+                .map_err(|_e| VfsError::Io)?;
         }
         drop(state);
 
@@ -859,7 +996,13 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         Ok(())
     }
 
-    fn setattr(&self, ino: u64, size: Option<u64>, mode: Option<u32>) -> Result<FileAttr, i32> {
+    fn setattr(
+        &self,
+        ino: u64,
+        size: Option<u64>,
+        mode: Option<u32>,
+    ) -> Result<FileAttr, VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         // Only COW for meaningful mutations (size/mode), not timestamp updates.
         // Combined with noatime mount option, this avoids copying large binaries
         // just because something read them.
@@ -883,17 +1026,17 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
             let file = File::options()
                 .write(true)
                 .open(&upper_path)
-                .map_err(|_e| EIO)?;
-            file.set_len(size).map_err(|_e| EIO)?;
+                .map_err(|_e| VfsError::Io)?;
+            file.set_len(size).map_err(|_e| VfsError::Io)?;
         }
         if let Some(mode) = mode {
-            set_file_permissions(&upper_path, mode).map_err(|_e| EIO)?;
+            set_file_permissions(&upper_path, mode).map_err(|_e| VfsError::Io)?;
         }
 
         self.make_upper_attr(&virtual_path, upper_ino)
     }
 
-    fn ino_to_path(&self, ino: u64) -> Result<PathBuf, i32> {
+    fn ino_to_path(&self, ino: u64) -> Result<PathBuf, VfsError> {
         match self.resolve_ino(ino)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => Ok(p),
         }
@@ -910,31 +1053,99 @@ mod tests {
     struct MockLowerFS;
 
     impl VfsOps for MockLowerFS {
-        fn lookup(&self, _parent: u64, _name: &OsStr) -> Result<FileAttr, i32> {
-            Err(ENOENT)
+        fn lookup(&self, _parent: u64, _name: &OsStr) -> Result<FileAttr, VfsError> {
+            Err(VfsError::NotFound)
         }
-        fn getattr(&self, _ino: u64) -> Result<FileAttr, i32> {
-            Err(ENOENT)
+        fn getattr(&self, _ino: u64) -> Result<FileAttr, VfsError> {
+            Err(VfsError::NotFound)
         }
-        fn readlink(&self, _ino: u64) -> Result<PathBuf, i32> {
-            Err(ENOENT)
+        fn readlink(&self, _ino: u64) -> Result<PathBuf, VfsError> {
+            Err(VfsError::NotFound)
         }
-        fn read(&self, _ino: u64, _offset: u64, _size: u32) -> Result<Vec<u8>, i32> {
-            Err(EIO)
+        fn read(&self, _ino: u64, _offset: u64, _size: u32) -> Result<Vec<u8>, VfsError> {
+            Err(VfsError::Io)
         }
-        fn content_source(&self, _ino: u64) -> Result<ContentSource, i32> {
-            Err(ENOENT)
+        fn content_source(&self, _ino: u64) -> Result<ContentSource, VfsError> {
+            Err(VfsError::NotFound)
         }
-        fn readdir(&self, _ino: u64, _offset: u64) -> Result<Vec<DirEntry>, i32> {
+        fn readdir(&self, _ino: u64, _offset: u64) -> Result<Vec<DirEntry>, VfsError> {
             Ok(vec![])
         }
-        fn ino_to_path(&self, ino: u64) -> Result<PathBuf, i32> {
+        fn ino_to_path(&self, ino: u64) -> Result<PathBuf, VfsError> {
             if ino == 1 {
                 Ok(PathBuf::new()) // root
             } else {
-                Err(ENOENT)
+                Err(VfsError::NotFound)
             }
         }
+    }
+
+    #[test]
+    fn test_validate_component_rejects_traversal() {
+        // Single safe components are accepted.
+        assert!(validate_component(OsStr::new("file.txt")).is_ok());
+        assert!(validate_component(OsStr::new("a.b.c")).is_ok());
+
+        // Empty, self, and parent references are rejected.
+        assert_eq!(
+            validate_component(OsStr::new("")),
+            Err(VfsError::InvalidArgument)
+        );
+        assert_eq!(
+            validate_component(OsStr::new(".")),
+            Err(VfsError::InvalidArgument)
+        );
+        assert_eq!(
+            validate_component(OsStr::new("..")),
+            Err(VfsError::InvalidArgument)
+        );
+
+        // Any embedded separator or NUL is rejected.
+        assert_eq!(
+            validate_component(OsStr::new("../etc/passwd")),
+            Err(VfsError::InvalidArgument)
+        );
+        assert_eq!(
+            validate_component(OsStr::new("../../../home/user/.bashrc")),
+            Err(VfsError::InvalidArgument)
+        );
+        assert_eq!(
+            validate_component(OsStr::new("sub/dir")),
+            Err(VfsError::InvalidArgument)
+        );
+        assert_eq!(
+            validate_component(OsStr::new("a\0b")),
+            Err(VfsError::InvalidArgument)
+        );
+    }
+
+    #[test]
+    fn test_overlay_create_rejects_traversal_name() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerFS,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        // A crafted NFS filename must not escape the overlay directory.
+        let escape = OsStr::new("../../../home/user/.bashrc");
+        assert_eq!(
+            ofs.create(1, escape, 0o644).err(),
+            Some(VfsError::InvalidArgument)
+        );
+        assert_eq!(
+            ofs.mkdir(1, escape, 0o755).err(),
+            Some(VfsError::InvalidArgument)
+        );
+        assert_eq!(ofs.lookup(1, escape).err(), Some(VfsError::InvalidArgument));
+        assert_eq!(ofs.unlink(1, escape).err(), Some(VfsError::InvalidArgument));
+
+        // Nothing was written outside the overlay directory.
+        assert!(!tmp.path().join("home/user/.bashrc").exists());
     }
 
     #[test]
@@ -1099,7 +1310,7 @@ mod tests {
     struct MockLowerWithFiles;
 
     impl VfsOps for MockLowerWithFiles {
-        fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, i32> {
+        fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, VfsError> {
             let make_attr = |ino: u64, kind: FileKind, size: u64| FileAttr {
                 ino,
                 size,
@@ -1122,15 +1333,15 @@ mod tests {
                 (3, "foo.py") => Ok(make_attr(4, FileKind::RegularFile, 11)),
                 (3, "bar.py") => Ok(make_attr(5, FileKind::RegularFile, 11)),
                 (6, "pytest") => Ok(make_attr(7, FileKind::RegularFile, 22)),
-                _ => Err(ENOENT),
+                _ => Err(VfsError::NotFound),
             }
         }
-        fn getattr(&self, ino: u64) -> Result<FileAttr, i32> {
+        fn getattr(&self, ino: u64) -> Result<FileAttr, VfsError> {
             let (kind, size) = match ino {
                 1 | 2 | 3 | 6 => (FileKind::Directory, 0),
                 4 | 5 => (FileKind::RegularFile, 11), // "foo content" / "bar content"
                 7 => (FileKind::RegularFile, 22),     // "#!/bin/python\nimport..." (virtual)
-                _ => return Err(ENOENT),
+                _ => return Err(VfsError::NotFound),
             };
             Ok(FileAttr {
                 ino,
@@ -1146,15 +1357,15 @@ mod tests {
                 gid: 0,
             })
         }
-        fn readlink(&self, _ino: u64) -> Result<PathBuf, i32> {
-            Err(ENOENT)
+        fn readlink(&self, _ino: u64) -> Result<PathBuf, VfsError> {
+            Err(VfsError::NotFound)
         }
-        fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
+        fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
             let content = match ino {
                 4 => b"foo content".to_vec(),
                 5 => b"bar content".to_vec(),
                 7 => b"#!/bin/python\nimport x".to_vec(), // virtual entry point
-                _ => return Err(EIO),
+                _ => return Err(VfsError::Io),
             };
             let start = offset as usize;
             let end = (start + size as usize).min(content.len());
@@ -1163,13 +1374,13 @@ mod tests {
             }
             Ok(content[start..end].to_vec())
         }
-        fn content_source(&self, ino: u64) -> Result<ContentSource, i32> {
+        fn content_source(&self, ino: u64) -> Result<ContentSource, VfsError> {
             match ino {
                 4 | 5 | 7 => Ok(ContentSource::Virtual), // entry point script
-                _ => Err(ENOENT),
+                _ => Err(VfsError::NotFound),
             }
         }
-        fn readdir(&self, ino: u64, _offset: u64) -> Result<Vec<DirEntry>, i32> {
+        fn readdir(&self, ino: u64, _offset: u64) -> Result<Vec<DirEntry>, VfsError> {
             match ino {
                 1 => Ok(vec![
                     DirEntry {
@@ -1205,10 +1416,10 @@ mod tests {
                     kind: FileKind::RegularFile,
                     name: "pytest".into(),
                 }]),
-                _ => Err(ENOENT),
+                _ => Err(VfsError::NotFound),
             }
         }
-        fn ino_to_path(&self, ino: u64) -> Result<PathBuf, i32> {
+        fn ino_to_path(&self, ino: u64) -> Result<PathBuf, VfsError> {
             match ino {
                 1 => Ok(PathBuf::new()),
                 2 => Ok(PathBuf::from("lib")),
@@ -1217,7 +1428,7 @@ mod tests {
                 5 => Ok(PathBuf::from("lib/python/bar.py")),
                 6 => Ok(PathBuf::from("bin")),
                 7 => Ok(PathBuf::from("bin/pytest")),
-                _ => Err(ENOENT),
+                _ => Err(VfsError::NotFound),
             }
         }
     }
@@ -1446,7 +1657,7 @@ mod tests {
         // lookup old name should fail
         assert_eq!(
             ofs.lookup(dir_attr.ino, OsStr::new("a.txt")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
     }
 
@@ -1492,7 +1703,7 @@ mod tests {
         // lookup old name should fail (whiteout)
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
 
         // Whiteout should be persisted
@@ -1524,7 +1735,7 @@ mod tests {
                     libc::RENAME_NOREPLACE,
                 )
                 .unwrap_err();
-            assert_eq!(err, libc::EEXIST);
+            assert_eq!(err, VfsError::AlreadyExists);
         }
     }
 
@@ -1579,7 +1790,7 @@ mod tests {
                     libc::RENAME_NOREPLACE,
                 )
                 .unwrap_err();
-            assert_eq!(err, libc::EEXIST);
+            assert_eq!(err, VfsError::AlreadyExists);
         }
     }
 
@@ -1630,11 +1841,11 @@ mod tests {
         assert!(ofs.lookup(python.ino, OsStr::new("final.py")).is_ok());
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("temp.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
     }
 
@@ -1713,6 +1924,70 @@ mod tests {
         assert_eq!(data, b"modified content");
     }
 
+    /// Concurrent copy-ups of the same file never expose a partial copy or
+    /// lose a write, and the staging area stays out of listings.
+    #[test]
+    fn test_concurrent_copy_up() {
+        // The race is timing dependent: repeat it on fresh overlays.
+        for _ in 0..25 {
+            concurrent_copy_up_round();
+        }
+    }
+
+    fn concurrent_copy_up_round() {
+        let tmp = TempDir::new().unwrap();
+        let ofs = std::sync::Arc::new(
+            OverlayFS::new(
+                MockLowerWithFiles,
+                tmp.path().join("upper"),
+                "hash".into(),
+                "test".into(),
+            )
+            .unwrap(),
+        );
+        let lib = ofs.lookup(1, OsStr::new("lib")).unwrap();
+        let python = ofs.lookup(lib.ino, OsStr::new("python")).unwrap();
+        let foo = ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap();
+
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let reader = {
+            let (ofs, stop) = (ofs.clone(), stop.clone());
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let data = ofs.read(foo.ino, 0, 1024).unwrap();
+                    assert!(
+                        data == b"foo content" || data == b"FOO CONTENT",
+                        "partial or empty read: {data:?}"
+                    );
+                }
+            })
+        };
+        let writers: Vec<_> = (0..8)
+            .map(|_| {
+                let ofs = ofs.clone();
+                std::thread::spawn(move || {
+                    let fh = ofs.open_write(foo.ino).unwrap();
+                    ofs.write(fh, 0, b"FOO CONTENT").unwrap();
+                    ofs.release_write(fh);
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        stop.store(true, Ordering::Relaxed);
+        reader.join().unwrap();
+
+        assert_eq!(ofs.read(foo.ino, 0, 1024).unwrap(), b"FOO CONTENT");
+        let root: Vec<_> = ofs
+            .readdir(1, 0)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        assert!(!root.iter().any(|name| name == COW_STAGING_DIRNAME));
+    }
+
     #[test]
     fn test_unlink_virtual_lower_file() {
         let tmp = TempDir::new().unwrap();
@@ -1740,7 +2015,7 @@ mod tests {
         // Lookup should now fail
         assert_eq!(
             ofs.lookup(bin.ino, OsStr::new("pytest")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
 
         // Whiteout should be recorded
@@ -1777,7 +2052,7 @@ mod tests {
         // Original name should be gone (whiteout)
         assert_eq!(
             ofs.lookup(bin.ino, OsStr::new("pytest")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
 
         // New name should work — getattr with original lower inode via promoted map
@@ -1838,7 +2113,7 @@ mod tests {
         // Old path should be gone
         assert_eq!(
             ofs.lookup(lib.ino, OsStr::new("python")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
     }
 
@@ -1862,9 +2137,9 @@ mod tests {
         assert_eq!(pytest.ino, 7);
 
         // rmdir on a lower-layer directory that still has visible children
-        // should fail with ENOTEMPTY — just like POSIX requires.
+        // should fail with VfsError::NotEmpty — just like POSIX requires.
         let err = ofs.rmdir(1, OsStr::new("bin")).unwrap_err();
-        assert_eq!(err, libc::ENOTEMPTY);
+        assert_eq!(err, VfsError::NotEmpty);
 
         // bin/pytest should still be accessible
         let bin = ofs.lookup(1, OsStr::new("bin")).unwrap();
@@ -1888,7 +2163,7 @@ mod tests {
         // The NFS server routes RMDIR through unlink, so unlink must also
         // reject removing a directory with visible lower-layer children.
         let err = ofs.unlink(1, OsStr::new("bin")).unwrap_err();
-        assert_eq!(err, libc::ENOTEMPTY);
+        assert_eq!(err, VfsError::NotEmpty);
 
         // bin/pytest should still be accessible
         let bin = ofs.lookup(1, OsStr::new("bin")).unwrap();
@@ -1916,7 +2191,10 @@ mod tests {
         ofs.rmdir(1, OsStr::new("bin")).unwrap();
 
         // bin should now be invisible
-        assert_eq!(ofs.lookup(1, OsStr::new("bin")).unwrap_err(), ENOENT);
+        assert_eq!(
+            ofs.lookup(1, OsStr::new("bin")).unwrap_err(),
+            VfsError::NotFound
+        );
     }
 
     /// Renaming a directory that has content in BOTH layers should preserve
@@ -1983,7 +2261,7 @@ mod tests {
         // Old path should be gone
         assert_eq!(
             ofs.lookup(lib.ino, OsStr::new("python")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
     }
 
@@ -2029,7 +2307,7 @@ mod tests {
         ofs.unlink(python.ino, OsStr::new("foo.py")).unwrap();
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
     }
 
@@ -2117,7 +2395,7 @@ mod tests {
         // Should be gone from python/
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
 
         // Should exist in bin/
@@ -2214,11 +2492,11 @@ mod tests {
 
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("bar.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
 
         // -- Step 2: "pip install" a new version at the same paths --
@@ -2253,11 +2531,11 @@ mod tests {
         // -- Step 5: Verify lower-layer originals do NOT bleed through --
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
         assert_eq!(
             ofs.lookup(python.ino, OsStr::new("bar.py")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
 
         // readdir should be empty (whiteouts still active)
@@ -2357,5 +2635,223 @@ mod tests {
         // The overlay directory must still exist — no silent wipe.
         assert!(overlay_dir.exists());
         assert!(overlay_dir.join(".rattler_vfs_state.json").exists());
+    }
+
+    // --- Copy-up correctness tests (issue #2582) ---
+
+    /// A lower FS exposing a symlink `link -> target.txt` and an executable
+    /// regular file `run` (perm 0o755, served as a virtual/transformed file).
+    /// Tree: root(1) → {link(2, symlink), target.txt(3), run(4, exec)}
+    struct MockLowerWithSpecialFiles;
+
+    impl VfsOps for MockLowerWithSpecialFiles {
+        fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, VfsError> {
+            match (parent, name.to_str().unwrap()) {
+                (1, "link") => self.getattr(2),
+                (1, "target.txt") => self.getattr(3),
+                (1, "run") => self.getattr(4),
+                _ => Err(VfsError::NotFound),
+            }
+        }
+        fn getattr(&self, ino: u64) -> Result<FileAttr, VfsError> {
+            let (kind, size, perm) = match ino {
+                1 => (FileKind::Directory, 0, 0o755),
+                2 => (FileKind::Symlink, 10, 0o777),
+                3 => (FileKind::RegularFile, 5, 0o644),
+                4 => (FileKind::RegularFile, 12, 0o755),
+                _ => return Err(VfsError::NotFound),
+            };
+            Ok(FileAttr {
+                ino,
+                size,
+                blocks: 1,
+                atime: UNIX_EPOCH,
+                mtime: UNIX_EPOCH,
+                ctime: UNIX_EPOCH,
+                kind,
+                perm,
+                nlink: 1,
+                uid: 0,
+                gid: 0,
+            })
+        }
+        fn readlink(&self, ino: u64) -> Result<PathBuf, VfsError> {
+            match ino {
+                2 => Ok(PathBuf::from("target.txt")),
+                _ => Err(VfsError::NotFound),
+            }
+        }
+        fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
+            let content = match ino {
+                3 => b"hello".to_vec(),
+                4 => b"#!/bin/sh\ne\n".to_vec(),
+                // Symlinks yield no bytes through the VFS — this is exactly why
+                // copy-up must special-case them.
+                2 => vec![],
+                _ => return Err(VfsError::Io),
+            };
+            let start = offset as usize;
+            let end = (start + size as usize).min(content.len());
+            if start >= content.len() {
+                return Ok(vec![]);
+            }
+            Ok(content[start..end].to_vec())
+        }
+        fn content_source(&self, ino: u64) -> Result<ContentSource, VfsError> {
+            match ino {
+                // Executable served through read() (prefix-replaced / virtual),
+                // matching how patched conda binaries are delivered.
+                3 | 4 => Ok(ContentSource::Virtual),
+                _ => Err(VfsError::NotFound),
+            }
+        }
+        fn readdir(&self, ino: u64, _offset: u64) -> Result<Vec<DirEntry>, VfsError> {
+            match ino {
+                1 => Ok(vec![
+                    DirEntry {
+                        ino: 2,
+                        kind: FileKind::Symlink,
+                        name: "link".into(),
+                    },
+                    DirEntry {
+                        ino: 3,
+                        kind: FileKind::RegularFile,
+                        name: "target.txt".into(),
+                    },
+                    DirEntry {
+                        ino: 4,
+                        kind: FileKind::RegularFile,
+                        name: "run".into(),
+                    },
+                ]),
+                _ => Err(VfsError::NotFound),
+            }
+        }
+        fn ino_to_path(&self, ino: u64) -> Result<PathBuf, VfsError> {
+            match ino {
+                1 => Ok(PathBuf::new()),
+                2 => Ok(PathBuf::from("link")),
+                3 => Ok(PathBuf::from("target.txt")),
+                4 => Ok(PathBuf::from("run")),
+                _ => Err(VfsError::NotFound),
+            }
+        }
+    }
+
+    /// Bug 1: copying a symlink up must recreate a symlink, not a 0-byte file.
+    #[test]
+    fn test_copy_up_preserves_symlink() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerWithSpecialFiles,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        let link = ofs.lookup(1, OsStr::new("link")).unwrap();
+        assert_eq!(link.kind, FileKind::Symlink);
+
+        ofs.copy_to_upper(Path::new("link"), link.ino).unwrap();
+
+        let upper = overlay_dir.join("link");
+        let meta = fs::symlink_metadata(&upper).unwrap();
+        assert!(
+            meta.file_type().is_symlink(),
+            "copied-up symlink must remain a symlink, not a regular file"
+        );
+        assert_eq!(fs::read_link(&upper).unwrap(), Path::new("target.txt"));
+    }
+
+    /// Bug 3: copying an executable up must preserve its permission bits.
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_up_preserves_exec_bit() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerWithSpecialFiles,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        let run = ofs.lookup(1, OsStr::new("run")).unwrap();
+        assert_eq!(run.perm, 0o755);
+
+        ofs.copy_to_upper(Path::new("run"), run.ino).unwrap();
+
+        let upper = overlay_dir.join("run");
+        let mode = fs::metadata(&upper).unwrap().permissions().mode();
+        assert_ne!(
+            mode & 0o111,
+            0,
+            "copied-up executable lost its exec bit (mode {mode:o})"
+        );
+    }
+
+    /// Bug 2: renaming a directory that is partially materialized in the upper
+    /// layer must not drop the lower-only children. This exercises the
+    /// `copy_to_upper` early-return: `lib/python` already exists in upper (a new
+    /// file was written there), yet its lower-only `foo.py`/`bar.py` must still
+    /// be carried across the rename.
+    #[test]
+    fn test_rename_partially_materialized_dir_preserves_lower_children() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerWithFiles,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        // MockLowerWithFiles: lib(2) → python(3) → {foo.py(4), bar.py(5)}
+        let lib = ofs.lookup(1, OsStr::new("lib")).unwrap();
+        let python = ofs.lookup(lib.ino, OsStr::new("python")).unwrap();
+
+        // Partially materialize lib/python in the upper layer by adding a file.
+        // This makes overlay_dir/lib/python exist on disk while foo.py/bar.py
+        // still live only in the lower layer.
+        let (_, fh) = ofs
+            .create(python.ino, OsStr::new("added.py"), 0o644)
+            .unwrap();
+        ofs.write(fh, 0, b"added").unwrap();
+        ofs.release_write(fh);
+        assert!(overlay_dir.join("lib/python").is_dir());
+
+        // Rename the whole lib tree — the child dir lib/python is now a
+        // partially-materialized upper directory.
+        ofs.rename(1, OsStr::new("lib"), 1, OsStr::new("lib2"), 0)
+            .unwrap();
+
+        // All three files must be reachable under the new path.
+        let lib2 = ofs.lookup(1, OsStr::new("lib2")).unwrap();
+        let python2 = ofs.lookup(lib2.ino, OsStr::new("python")).unwrap();
+
+        let foo = ofs.lookup(python2.ino, OsStr::new("foo.py")).unwrap();
+        assert_eq!(ofs.read(foo.ino, 0, 1024).unwrap(), b"foo content");
+
+        let bar = ofs.lookup(python2.ino, OsStr::new("bar.py")).unwrap();
+        assert_eq!(ofs.read(bar.ino, 0, 1024).unwrap(), b"bar content");
+
+        assert!(ofs.lookup(python2.ino, OsStr::new("added.py")).is_ok());
+
+        // The lower-only children must exist as real files on disk in upper,
+        // not be silently dropped.
+        assert!(overlay_dir.join("lib2/python/foo.py").exists());
+        assert!(overlay_dir.join("lib2/python/bar.py").exists());
+
+        // Old path is gone.
+        assert_eq!(
+            ofs.lookup(1, OsStr::new("lib")).unwrap_err(),
+            VfsError::NotFound
+        );
     }
 }

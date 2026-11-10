@@ -112,7 +112,7 @@ class PackageRecord:
         return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
     @staticmethod
-    def to_graph(records: list[PackageRecord]) -> nx.DiGraph:  # type: ignore[type-arg]
+    def to_graph(records: list[PackageRecord]) -> nx.DiGraph:
         """
         Converts a list of PackageRecords to a DAG (`networkx.DiGraph`).
         The nodes in the graph are the PackageRecords and the edges are the dependencies.
@@ -126,7 +126,7 @@ class PackageRecord:
 
         names_to_records = {record.name: record for record in records}
 
-        graph = nx.DiGraph()  # type: ignore[var-annotated]
+        graph = nx.DiGraph()
         for record in records:
             graph.add_node(record)
             for dep in record.depends:
@@ -196,7 +196,7 @@ class PackageRecord:
         sha256: bytes | None = None,
         md5: bytes | None = None,
         size: int | None = None,
-        features: list[str] | None = None,
+        features: str | None = None,
         legacy_bz2_md5: bytes | None = None,
         legacy_bz2_size: int | None = None,
         license: str | None = None,
@@ -205,6 +205,8 @@ class PackageRecord:
         extra_depends: dict[str, list[str]] | None = None,
         flags: list[str] | None = None,
         attestations_sha256: bytes | None = None,
+        track_features: list[str] | None = None,
+        timestamp: datetime.datetime | None = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -268,6 +270,10 @@ class PackageRecord:
             self._record.flags = flags
         if attestations_sha256 is not None:
             self._record.attestations_sha256 = attestations_sha256
+        if track_features is not None:
+            self._record.track_features = track_features
+        if timestamp is not None:
+            self.timestamp = timestamp
 
     @property
     def arch(self) -> str | None:

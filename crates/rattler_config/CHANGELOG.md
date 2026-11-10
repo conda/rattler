@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2](https://github.com/conda/rattler/compare/rattler_config-v0.12.1...rattler_config-v0.12.2) - 2026-11-06
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.12.1](https://github.com/conda/rattler/compare/rattler_config-v0.12.0...rattler_config-v0.12.1) - 2026-11-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.12.0](https://github.com/conda/rattler/compare/rattler_config-v0.11.0...rattler_config-v0.12.0) - 2026-11-02
+
+### Fixed
+
+- *(config)* reject exclude-newer url exemptions with other fields and keep layout when editing exclude-newer ([#3082](https://github.com/conda/rattler/pull/3082))
+
+### Other
+
+- *(config)* simplify the exclude-newer document edit ([#3085](https://github.com/conda/rattler/pull/3085))
+
+## [0.11.0](https://github.com/conda/rattler/compare/rattler_config-v0.10.0...rattler_config-v0.11.0) - 2026-10-30
+
+### Fixed
+
+- *(config)* validate exclude-newer and edit its keys by package name ([#3024](https://github.com/conda/rattler/pull/3024))
+
+## [0.10.0](https://github.com/conda/rattler/compare/rattler_config-v0.9.5...rattler_config-v0.10.0) - 2026-10-28
+
+### Added
+
+- *(config)* add exclude-newer to the shared configuration ([#3020](https://github.com/conda/rattler/pull/3020))
+
 ## [0.9.5](https://github.com/conda/rattler/compare/rattler_config-v0.9.4...rattler_config-v0.9.5) - 2026-10-27
 
 ### Other

@@ -134,7 +134,7 @@ async fn test_offline_solve_installs_from_the_cache_alone() {
             .get_or_fetch(
                 key,
                 |_destination| async move {
-                    Err::<(), std::io::Error>(std::io::Error::other(
+                    Err::<Option<_>, std::io::Error>(std::io::Error::other(
                         "the offline install must never fetch",
                     ))
                 },

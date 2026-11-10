@@ -39,12 +39,12 @@ def test_checked_build_strings(value: str) -> None:
 @pytest.mark.parametrize("value", ["0", "py3-none-any"])
 def test_plain_strings_are_rejected(value: str) -> None:
     with pytest.raises(TypeError, match="BuildString"):
-        record(value)  # type: ignore[arg-type]
+        record(value)  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError, match="BuildString"):
-        GenericVirtualPackage(PackageName("__demo"), Version("1"), value)  # type: ignore[arg-type]
+        GenericVirtualPackage(PackageName("__demo"), Version("1"), value)  # ty: ignore[invalid-argument-type]
     for target in (record(BuildString("0")), index_json()):
         with pytest.raises(TypeError, match="BuildString"):
-            target.build = value  # type: ignore[assignment]
+            target.build = value  # ty: ignore[invalid-assignment]
         assert target.build == BuildString("0")
 
 

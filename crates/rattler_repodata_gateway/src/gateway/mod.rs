@@ -36,7 +36,7 @@ use channel_notices::CachedChannelNotices;
 pub use channel_notices::ChannelNoticeResult;
 pub use channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
-pub use error::GatewayError;
+pub use error::{GatewayError, ShardHashMismatchError};
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
 pub use query::{

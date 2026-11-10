@@ -56,7 +56,7 @@ pub enum SolveError {
     #[error(transparent)]
     ParseMatchSpecError(#[from] rattler_conda_types::ParseMatchSpecError),
 
-    /// Encountered duplicate records in the available packages.
+    /// Encountered records with the same package identity but conflicting contents.
     DuplicateRecords(String),
 
     /// To support Resolvo cancellation
@@ -405,17 +405,24 @@ impl ExcludeNewer {
         self.insert_exemption(spec, Some(cutoff))
     }
 
-    fn insert_exemption(
-        mut self,
-        spec: MatchSpec,
-        cutoff: Option<Timestamp>,
-    ) -> Result<Self, InvalidExemptionError> {
+    /// Checks that `spec` can be used as an exemption, see
+    /// [`Self::with_exemption`], without adding it.
+    pub fn validate_exemption(spec: &MatchSpec) -> Result<(), InvalidExemptionError> {
         if spec.name.as_exact().is_none() {
             return Err(InvalidExemptionError::NotExactName(spec.to_string()));
         }
         if spec.extras.is_some() || spec.condition.is_some() || spec.namespace.is_some() {
             return Err(InvalidExemptionError::UnsupportedField(spec.to_string()));
         }
+        Ok(())
+    }
+
+    fn insert_exemption(
+        mut self,
+        spec: MatchSpec,
+        cutoff: Option<Timestamp>,
+    ) -> Result<Self, InvalidExemptionError> {
+        Self::validate_exemption(&spec)?;
         self.exemptions.insert(spec, cutoff);
         Ok(self)
     }
@@ -526,6 +533,14 @@ pub enum ChannelPriority {
     /// For a given package, candidates from higher-priority channel's are exhausted
     /// before falling back to the next channel, regardless of the version.
     Flexible,
+
+    /// Like [`ChannelPriority::Disabled`], the package version takes
+    /// precedence over the channel. Unlike it, the channel order still breaks
+    /// ties between candidates with the same version, before the build number
+    /// is compared. This matches conda's documented sort order when its
+    /// channel priority is set to disabled. Only supported by the resolvo
+    /// backend.
+    VersionFirst,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends
@@ -560,6 +575,33 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// See [`Self::locked_packages`] for the borrowing rationale.
     pub pinned_packages: Vec<&'a RepoDataRecord>,
 
+    /// Records that are candidates in the solve, without any preference.
+    ///
+    /// Unlike [`Self::locked_packages`], these records are not favored, and
+    /// unlike [`Self::pinned_packages`], they do not restrict the candidates
+    /// for their package. Use them for records already installed in a prefix
+    /// that may come from channels no longer in [`Self::available_packages`].
+    ///
+    /// Channel priority treats each record as if it came from the
+    /// highest-priority channel in [`Self::available_packages`] that contains
+    /// a package with the same name, or from the highest-priority channel when
+    /// none does. As a result:
+    ///
+    /// - With [`ChannelPriority::Strict`], strict channel priority never
+    ///   removes these records, and they never cause a channel record to be
+    ///   removed.
+    /// - With [`ChannelPriority::Flexible`], they compete with the records of
+    ///   that channel.
+    /// - With [`ChannelPriority::Disabled`], they compete with all records.
+    /// - With [`ChannelPriority::VersionFirst`], they compete with all records
+    ///   and rank with that channel when versions tie.
+    ///
+    /// A record from a lower-priority channel therefore competes with
+    /// higher-priority channels. For example, an installed `foo 3.0` from a
+    /// lower-priority channel is selected over `foo 2.0` from a higher-priority
+    /// channel.
+    pub additional_packages: Vec<&'a RepoDataRecord>,
+
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
 
@@ -574,8 +616,7 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
-    /// The channel priority to solve with, either [`ChannelPriority::Strict`]
-    /// or [`ChannelPriority::Disabled`]
+    /// The channel priority to solve with, see [`ChannelPriority`].
     pub channel_priority: ChannelPriority,
 
     /// Exclude packages newer than the configured cutoff.
@@ -587,11 +628,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// - a relative duration, equivalent to the historical `min_age`
     ///   behavior.
     ///
-    /// The cutoff applies to `locked_packages` and `pinned_packages` as well.
-    /// A locked record newer than the cutoff is not favored, so the solver
-    /// picks a record the cutoff allows instead. With the `resolvo` backend,
-    /// a pinned record newer than the cutoff makes the solve unsatisfiable
-    /// when the package is needed, the same as with `excluded_candidates`.
+    /// The cutoff applies to `locked_packages`, `pinned_packages` and
+    /// `additional_packages` as well. A locked record newer than the cutoff
+    /// is not favored, so the solver picks a record the cutoff allows instead.
+    /// With the `resolvo` backend, a pinned record newer than the cutoff
+    /// makes the solve unsatisfiable when the package is needed, the same as
+    /// with `excluded_candidates`.
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The solve strategy.
@@ -644,6 +686,7 @@ impl<'r, T> SolverTask<'r, T> {
             available_packages,
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
+            additional_packages: Vec::new(),
             virtual_packages: Vec::new(),
             specs: Vec::new(),
             constraints: Vec::new(),
@@ -760,7 +803,10 @@ impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> Into
 /// that package, while channels outside the multichannel are still excluded.
 /// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
 /// member over a later one. The order of the members only breaks ties between
-/// otherwise identical candidates.
+/// otherwise identical candidates. With [`ChannelPriority::VersionFirst`] a
+/// version tie between two members falls through to the build number, since
+/// the members share a rank, while a tie with a channel outside the
+/// multichannel goes to the earlier tier.
 ///
 /// For backends that support channel-specific match specs, a spec whose
 /// channel name equals the name of the multichannel (e.g. `defaults::python`)

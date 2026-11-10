@@ -23,7 +23,7 @@ use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
     MatchSpec, PackageName, PackageNameMatcher, PackageRecord, PrefixRecord, RepoDataRecord,
-    Subdir, prefix_record::Link, utils::ensure_safe_path_component,
+    Subdir, package::DistArchiveType, prefix_record::Link, utils::ensure_safe_path_component,
 };
 use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rayon::prelude::*;
@@ -1036,17 +1036,33 @@ async fn populate_cache(
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     } else {
-        cache
-            .get_or_fetch_from_url_with_retry(
-                &record.package_record,
-                record.url.clone(),
-                downloader,
-                default_retry_policy(),
-                reporter,
-                concurrent_requests_semaphore,
-            )
-            .await
-            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+        let result = match record.identifier.archive_type {
+            DistArchiveType::Wheel(_) => {
+                cache
+                    .get_or_fetch_wheel_from_url_with_retry(
+                        &record.package_record,
+                        record.url.clone(),
+                        downloader,
+                        default_retry_policy(),
+                        reporter,
+                        concurrent_requests_semaphore,
+                    )
+                    .await
+            }
+            DistArchiveType::Conda(_) => {
+                cache
+                    .get_or_fetch_from_url_with_retry(
+                        &record.package_record,
+                        record.url.clone(),
+                        downloader,
+                        default_retry_policy(),
+                        reporter,
+                        concurrent_requests_semaphore,
+                    )
+                    .await
+            }
+        };
+        result.map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     }
 }
 

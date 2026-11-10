@@ -5,12 +5,37 @@ use rattler_conda_types::{
     package::{BuildString, CondaArchiveIdentifier},
 };
 use rattler_digest::{Md5Hash, Sha256, Sha256Hash, compute_bytes_digest, compute_url_digest};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use rattler_package_streaming::wheel::CONVERSION_VERSION;
+
+/// Separates conda archives from each version of the wheel conversion format.
+#[derive(Debug, Hash, Clone, Copy, Eq, PartialEq)]
+pub(super) enum CacheNamespace {
+    Conda,
+    Wheel(u64),
+}
+
+impl CacheNamespace {
+    pub(super) fn is_wheel_directory(name: &str) -> bool {
+        name.strip_prefix("wheels-v").is_some_and(|version| {
+            !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
+        })
+    }
+
+    pub(super) fn directory(self) -> PathBuf {
+        match self {
+            Self::Conda => PathBuf::new(),
+            Self::Wheel(version) => PathBuf::from(format!("wheels-v{version}")),
+        }
+    }
+}
 
 /// Provides a unique identifier for packages in the cache.
 /// TODO: This could not be unique over multiple subdir. How to handle?
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct CacheKey {
+    pub(super) namespace: CacheNamespace,
     pub(crate) name: String,
     pub(crate) version: String,
     pub(crate) build_string: String,
@@ -20,6 +45,19 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
+    /// Identifies a wheel converted with the current converter version.
+    ///
+    /// Unlike `CacheKey::from(record)`, this selects the versioned wheel namespace.
+    /// Use it for wheel presence checks with extensionless download URLs.
+    pub fn from_wheel_record(record: &PackageRecord) -> Self {
+        Self::from(record).with_wheel_namespace()
+    }
+
+    pub(super) fn with_wheel_namespace(mut self) -> Self {
+        self.namespace = CacheNamespace::Wheel(CONVERSION_VERSION);
+        self
+    }
+
     /// Adds a sha256 hash of the archive.
     pub fn with_sha256(mut self, sha256: Sha256Hash) -> Self {
         self.sha256 = Some(sha256);
@@ -63,7 +101,7 @@ impl CacheKey {
     /// Renders the cache key as a directory name, rejecting metadata-derived
     /// components that could escape the cache root (GHSA-h672-p7h7-97v9).
     ///
-    /// This is intentionally the only way to turn a key into a path: there is no
+    /// Both the leaf and namespaced path go through this validation; there is no
     /// `Display`/`to_string` that could bypass the check.
     pub(crate) fn to_path_segment(&self) -> Result<String, InvalidPathComponentError> {
         let segment = match &self.origin_hash {
@@ -75,6 +113,11 @@ impl CacheKey {
         };
         ensure_safe_path_component(&segment)?;
         Ok(segment)
+    }
+
+    /// Returns the validated package path relative to a cache layer.
+    pub(super) fn relative_path(&self) -> Result<PathBuf, InvalidPathComponentError> {
+        Ok(self.namespace.directory().join(self.to_path_segment()?))
     }
 
     /// Return the sha256 hash of the package if it is known.
@@ -129,6 +172,7 @@ impl CacheKey {
 impl From<CondaArchiveIdentifier> for CacheKey {
     fn from(pkg: CondaArchiveIdentifier) -> Self {
         CacheKey {
+            namespace: CacheNamespace::Conda,
             name: pkg.identifier.name,
             version: pkg.identifier.version,
             build_string: pkg.identifier.build_string,
@@ -142,6 +186,7 @@ impl From<CondaArchiveIdentifier> for CacheKey {
 impl From<&PackageRecord> for CacheKey {
     fn from(record: &PackageRecord) -> Self {
         Self {
+            namespace: CacheNamespace::Conda,
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
             build_string: record.build.to_string(),

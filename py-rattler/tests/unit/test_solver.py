@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -129,6 +130,38 @@ async def test_solve_channel_priority_disabled(
         == pytorch_channel.base_url
     )
     assert len(solved_data) == 32
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("channel_priority", "expected_channel"),
+    [
+        # Disabled never consults the channel, so the version tie goes to the
+        # higher build number in the second channel.
+        (ChannelPriority.Disabled, "version-tie-b"),
+        # VersionFirst breaks the version tie by channel order before the build
+        # number, like conda's disabled channel priority.
+        (ChannelPriority.VersionFirst, "version-tie-a"),
+    ],
+)
+async def test_solve_version_tie_channel_priority(
+    gateway: Gateway, test_data_dir: str, channel_priority: ChannelPriority, expected_channel: str
+) -> None:
+    # Both channels carry foo 1.0, the second one with a higher build number.
+    channel_a = Channel(os.path.join(test_data_dir, "channels/version-tie-a"))
+    channel_b = Channel(os.path.join(test_data_dir, "channels/version-tie-b"))
+
+    solved_data = await solve(
+        [channel_a, channel_b],
+        ["foo"],
+        platforms=["noarch"],
+        gateway=gateway,
+        channel_priority=channel_priority,
+    )
+
+    assert len(solved_data) == 1
+    assert str(solved_data[0].version) == "1.0"
+    assert solved_data[0].channel == Channel(os.path.join(test_data_dir, f"channels/{expected_channel}")).base_url
 
 
 @pytest.mark.asyncio
@@ -603,3 +636,128 @@ async def test_timestamp_policy(tmp_path: Path, sparse: bool, policy: TimestampP
     else:
         result = await solve([repodata], ["foo"], platforms=["noarch"], exclude_newer=cutoff, timestamp_policy=policy)
     assert str(result[0].version) == expected
+
+
+def write_noarch_repodata(channel_dir: Path, records: list[dict[str, Any]]) -> SparseRepoData:
+    path = channel_dir / "noarch" / "repodata.json"
+    path.parent.mkdir(parents=True)
+    packages = {
+        f"{r['name']}-{r['version']}-0.tar.bz2": {
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+            "subdir": "noarch",
+            **r,
+        }
+        for r in records
+    }
+    path.write_text(json.dumps({"info": {"subdir": "noarch"}, "packages": packages}))
+    return SparseRepoData(Channel(str(channel_dir)), "noarch", path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sparse", [False, True])
+@pytest.mark.parametrize(
+    "available,specs,additional,expected",
+    [
+        pytest.param(
+            [{"name": "bar", "version": "1.0", "depends": ["foo"]}],
+            ["bar"],
+            ["1.0"],
+            {("bar", "1.0"), ("foo", "1.0")},
+            id="selectable-without-repodata",
+        ),
+        pytest.param(
+            [{"name": "foo", "version": "2.0"}],
+            ["foo"],
+            ["1.0"],
+            {("foo", "2.0")},
+            id="not-favored-over-newer",
+        ),
+        pytest.param(
+            [{"name": "foo", "version": "2.0"}],
+            ["foo"],
+            ["3.0"],
+            {("foo", "3.0")},
+            id="wins-when-best-candidate",
+        ),
+        pytest.param(
+            [{"name": "foo", "version": "2.0"}],
+            ["foo <2"],
+            ["1.0"],
+            {("foo", "1.0")},
+            id="used-when-spec-requires-it",
+        ),
+        pytest.param(
+            [{"name": "bar", "version": "1.0"}],
+            ["bar"],
+            ["1.0"],
+            {("bar", "1.0")},
+            id="not-forced-into-solution",
+        ),
+    ],
+)
+async def test_solve_additional_packages(
+    tmp_path: Path,
+    sparse: bool,
+    available: list[dict[str, Any]],
+    specs: list[str],
+    additional: list[str],
+    expected: set[tuple[str, str]],
+) -> None:
+    """`additional_packages` are plain candidates: the solver may select them,
+    but they are neither favored (like locked packages) nor forced into the
+    solution (like pinned packages)."""
+    repodata = write_noarch_repodata(tmp_path / "current", available)
+    removed = write_noarch_repodata(tmp_path / "removed", [{"name": "foo", "version": v} for v in additional])
+
+    if sparse:
+        result = await solve_with_sparse_repodata(
+            specs,
+            [repodata],
+            additional_packages=removed.load_records("foo"),
+            channel_priority=ChannelPriority.Strict,
+        )
+    else:
+        result = await solve(
+            [repodata],
+            specs,
+            platforms=["noarch"],
+            additional_packages=removed.load_records("foo"),
+            channel_priority=ChannelPriority.Strict,
+        )
+
+    assert {(r.name.normalized, str(r.version)) for r in result} == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sparse", [False, True])
+async def test_solve_additional_packages_exclude_newer(tmp_path: Path, sparse: bool) -> None:
+    cutoff = datetime.datetime(2022, 1, 1, tzinfo=datetime.timezone.utc)
+    cutoff_ms = int(cutoff.timestamp() * 1000)
+    repodata = write_noarch_repodata(
+        tmp_path / "current",
+        [{"name": "bar", "version": "1.0", "depends": ["foo"], "timestamp": cutoff_ms - 1000}],
+    )
+    removed = write_noarch_repodata(
+        tmp_path / "removed",
+        [
+            {"name": "foo", "version": "1.0", "timestamp": cutoff_ms - 1000},
+            {"name": "foo", "version": "3.0", "timestamp": cutoff_ms + 1000},
+        ],
+    )
+
+    if sparse:
+        result = await solve_with_sparse_repodata(
+            ["bar"], [repodata], additional_packages=removed.load_records("foo"), exclude_newer=cutoff
+        )
+    else:
+        result = await solve(
+            [repodata],
+            ["bar"],
+            platforms=["noarch"],
+            additional_packages=removed.load_records("foo"),
+            exclude_newer=cutoff,
+        )
+
+    assert {(r.name.normalized, str(r.version)) for r in result} == {("bar", "1.0"), ("foo", "1.0")}

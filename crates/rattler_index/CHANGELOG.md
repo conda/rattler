@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.7](https://github.com/conda/rattler/compare/rattler_index-v0.34.6...rattler_index-v0.34.7) - 2026-11-06
+
+### Other
+
+- *(index)* read package archives in bulk ([#3089](https://github.com/conda/rattler/pull/3089))
+
+## [0.34.6](https://github.com/conda/rattler/compare/rattler_index-v0.34.5...rattler_index-v0.34.6) - 2026-11-04
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.34.5](https://github.com/conda/rattler/compare/rattler_index-v0.34.4...rattler_index-v0.34.5) - 2026-11-02
+
+### Other
+
+- updated the following local packages: rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.34.4](https://github.com/conda/rattler/compare/rattler_index-v0.34.3...rattler_index-v0.34.4) - 2026-10-30
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.34.3](https://github.com/conda/rattler/compare/rattler_index-v0.34.2...rattler_index-v0.34.3) - 2026-10-30
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.34.2](https://github.com/conda/rattler/compare/rattler_index-v0.34.1...rattler_index-v0.34.2) - 2026-10-28
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.34.1](https://github.com/conda/rattler/compare/rattler_index-v0.34.0...rattler_index-v0.34.1) - 2026-10-27
 
 ### Other

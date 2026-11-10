@@ -60,7 +60,9 @@ pub use link::{LinkFileError, LinkMethod, link_file};
 pub use python::PythonInfo;
 use rattler_conda_types::{
     Subdir,
-    package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
+    package::{
+        AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathType, PathsEntry, PathsJson,
+    },
     prefix::Prefix,
     prefix_record::{self, LinkType},
 };
@@ -493,7 +495,10 @@ pub async fn link_package(
                 no_link: entry.no_link,
                 sha256: entry.sha256,
                 // Only set sha256_in_prefix if it differs from the original sha256
-                sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
+                sha256_in_prefix: if entry.path_type == PathType::SoftLink
+                    || entry.path_type == PathType::Directory
+                    || Some(result.sha256) == entry.sha256
+                {
                     None
                 } else {
                     Some(result.sha256)
@@ -931,7 +936,10 @@ pub fn link_package_sync(
                     no_link: entry.no_link,
                     sha256: entry.sha256,
                     // Only set sha256_in_prefix if it differs from the original sha256
-                    sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
+                    sha256_in_prefix: if entry.path_type == PathType::SoftLink
+                        || entry.path_type == PathType::Directory
+                        || Some(result.sha256) == entry.sha256
+                    {
                         None
                     } else {
                         Some(result.sha256)
@@ -1510,6 +1518,96 @@ mod test {
         insta::assert_yaml_snapshot!(paths);
     }
 
+    /// A raw wheel script must use the target interpreter, not retain `#!python`.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_wheel_raw_script_uses_environment_python() {
+        use rattler_conda_types::{NoArchType, PackageRecord};
+        use std::{fs, os::unix::fs::PermissionsExt};
+
+        let root = tempdir().unwrap();
+        let record = PackageRecord {
+            noarch: NoArchType::python(),
+            subdir: "noarch".into(),
+            ..PackageRecord::new(
+                "script-probe".parse().unwrap(),
+                "1.0".parse::<Version>().unwrap(),
+                "py3_none_any_0".parse().unwrap(),
+            )
+        };
+        let cached = PackageCache::new(root.path().join("cache"))
+            .get_or_fetch_from_path(
+                &get_test_data_dir().join("wheels/script_probe-1.0-py3-none-any.whl"),
+                Some(&record),
+                None,
+            )
+            .await
+            .unwrap();
+        let cached_script = cached.path().join("python-scripts/script-probe");
+        let original = fs::read(&cached_script).unwrap();
+        let original_mode = cached_script.metadata().unwrap().permissions().mode();
+        crate::validation::validate_package_directory(
+            cached.path(),
+            crate::validation::ValidationMode::Full,
+        )
+        .unwrap();
+        let python_info = PythonInfo::from_version(
+            &"3.12.0".parse::<Version>().unwrap(),
+            None,
+            Subdir::current().unwrap(),
+        )
+        .unwrap();
+
+        for name in [
+            "env-one".to_owned(),
+            "env with spaces".to_owned(),
+            format!("{0}/{0}/{0}", "long-prefix".repeat(16)),
+        ] {
+            let target = root.path().join(name);
+            let prefix = Prefix::create(&target).unwrap();
+            // Conversion cannot know the target Python minor version; conda's
+            // Python packages provide an unversioned interpreter in bin/python.
+            let python = target.join("bin/python");
+            fs::create_dir_all(python.parent().unwrap()).unwrap();
+            // Use a native executable as an interpreter stand-in: macOS does
+            // not support another shebang script as a shebang interpreter.
+            // echo prints the script path handed to it by the kernel/wrapper.
+            std::os::unix::fs::symlink("/bin/echo", &python).unwrap();
+
+            link_package(
+                cached.path(),
+                &prefix,
+                &InstallDriver::default(),
+                InstallOptions {
+                    python_info: Some(python_info.clone()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+            for script_name in ["script-probe", "script-probe-gui"] {
+                let script = target.join("bin").join(script_name);
+                assert!(script.is_file());
+                assert_ne!(script.metadata().unwrap().permissions().mode() & 0o111, 0);
+                let output = Command::new(&script)
+                    .current_dir(root.path())
+                    .output()
+                    .expect("raw wheel script should execute using the environment's Python");
+                assert!(output.status.success(), "{output:?}");
+                assert_eq!(
+                    String::from_utf8(output.stdout).unwrap(),
+                    format!("{}\n", script.display())
+                );
+            }
+            assert_eq!(fs::read(&cached_script).unwrap(), original);
+            assert_eq!(
+                cached_script.metadata().unwrap().permissions().mode(),
+                original_mode
+            );
+        }
+    }
+
     /// `link_package_sync` runs the per-file linking in parallel via rayon,
     /// so its result must be sorted by `relative_path` before returning to
     /// produce reproducible `conda-meta/<package>.json` files.
@@ -1560,5 +1658,127 @@ mod test {
                 window[1].relative_path,
             );
         }
+    }
+
+    /// Softlinks must never record `sha256_in_prefix` in `conda-meta` records,
+    /// ensuring deterministic prefix records across different link methods
+    /// (e.g. APFS directory reflinks vs per-file linking; see #2966).
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_softlink_sha256_in_prefix_is_none() {
+        use rattler_conda_types::package::{
+            FileMode, IndexJson, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
+        };
+        use std::path::PathBuf;
+
+        let temp_dir = tempdir().unwrap();
+        let package_dir = temp_dir.path().join("pkg");
+        fs_err::create_dir_all(&package_dir).unwrap();
+        fs_err::write(package_dir.join("link.txt"), "target content").unwrap();
+        fs_err::write(
+            package_dir.join("patched.txt"),
+            "prefix = '/placeholder/path'\n",
+        )
+        .unwrap();
+
+        let index_json: IndexJson = serde_json::from_str(
+            r#"{"name": "test-pkg", "version": "1.0.0", "build": "0", "build_number": 0}"#,
+        )
+        .unwrap();
+
+        // Even though the original hash differs from the linked file, softlinks
+        // must never have sha256_in_prefix recorded in prefix records.
+        // Files patched with prefix placeholders SHOULD record sha256_in_prefix.
+        let paths_json = PathsJson {
+            paths: vec![
+                PathsEntry {
+                    relative_path: PathBuf::from("link.txt"),
+                    no_link: false,
+                    path_type: PathType::SoftLink,
+                    prefix_placeholder: None,
+                    sha256: Some(
+                        rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+                            "1111111111111111111111111111111111111111111111111111111111111111",
+                        )
+                        .unwrap(),
+                    ),
+                    size_in_bytes: Some(14),
+                },
+                PathsEntry {
+                    relative_path: PathBuf::from("patched.txt"),
+                    no_link: false,
+                    path_type: PathType::HardLink,
+                    prefix_placeholder: Some(PrefixPlaceholder {
+                        file_mode: FileMode::Text,
+                        placeholder: "/placeholder/path".to_string(),
+                        experimental_offsets: None,
+                    }),
+                    sha256: Some(
+                        rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+                            "2222222222222222222222222222222222222222222222222222222222222222",
+                        )
+                        .unwrap(),
+                    ),
+                    size_in_bytes: Some(30),
+                },
+            ],
+            paths_version: 1,
+        };
+
+        let install_options = InstallOptions {
+            index_json: Some(index_json),
+            paths_json: Some(paths_json),
+            allow_symbolic_links: Some(false),
+            ..InstallOptions::default()
+        };
+
+        let install_driver = InstallDriver::default();
+
+        // 1. Test async link_package
+        let target_dir_async = tempdir().unwrap();
+        let prefix_async = Prefix::create(target_dir_async.path()).unwrap();
+        let paths_async = link_package(
+            &package_dir,
+            &prefix_async,
+            &install_driver,
+            install_options.clone(),
+        )
+        .await
+        .unwrap();
+
+        let softlink_async = paths_async
+            .iter()
+            .find(|p| p.path_type == rattler_conda_types::prefix_record::PathType::SoftLink)
+            .expect("expected softlink entry in async link");
+        assert_eq!(softlink_async.sha256_in_prefix, None);
+
+        let patched_async = paths_async
+            .iter()
+            .find(|p| p.path_type == rattler_conda_types::prefix_record::PathType::HardLink)
+            .expect("expected patched entry in async link");
+        assert!(patched_async.sha256_in_prefix.is_some());
+
+        // 2. Test sync link_package_sync
+        let target_dir_sync = tempdir().unwrap();
+        let prefix_sync = Prefix::create(target_dir_sync.path()).unwrap();
+        let (paths_sync, _link_type) = crate::install::link_package_sync(
+            &package_dir,
+            &prefix_sync,
+            install_driver.clobber_registry.clone(),
+            install_options,
+        )
+        .unwrap();
+
+        let softlink_sync = paths_sync
+            .iter()
+            .find(|p| p.path_type == rattler_conda_types::prefix_record::PathType::SoftLink)
+            .expect("expected softlink entry in sync link");
+        assert_eq!(softlink_sync.sha256_in_prefix, None);
+
+        let patched_sync = paths_sync
+            .iter()
+            .find(|p| p.path_type == rattler_conda_types::prefix_record::PathType::HardLink)
+            .expect("expected patched entry in sync link");
+        assert!(patched_sync.sha256_in_prefix.is_some());
     }
 }

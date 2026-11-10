@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [13.0.0](https://github.com/conda/rattler/compare/rattler_solve-v12.0.4...rattler_solve-v13.0.0) - 2026-11-06
+
+### Added
+
+- *(rattler_solve)* add version-first channel priority, matching conda's disabled sort order ([#2974](https://github.com/conda/rattler/pull/2974))
+- add `additional_packages` option to solver ([#2968](https://github.com/conda/rattler/pull/2968))
+
+## [12.0.4](https://github.com/conda/rattler/compare/rattler_solve-v12.0.3...rattler_solve-v12.0.4) - 2026-11-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [12.0.3](https://github.com/conda/rattler/compare/rattler_solve-v12.0.2...rattler_solve-v12.0.3) - 2026-10-30
+
+### Fixed
+
+- *(config)* validate exclude-newer and edit its keys by package name ([#3024](https://github.com/conda/rattler/pull/3024))
+
+## [12.0.2](https://github.com/conda/rattler/compare/rattler_solve-v12.0.1...rattler_solve-v12.0.2) - 2026-10-30
+
+### Fixed
+
+- *(solve)* warn and skip identical duplicate records ([#3043](https://github.com/conda/rattler/pull/3043))
+
+## [12.0.1](https://github.com/conda/rattler/compare/rattler_solve-v12.0.0...rattler_solve-v12.0.1) - 2026-10-28
+
+### Other
+
+- updated the following local packages: rattler_cache
+
 ## [12.0.0](https://github.com/conda/rattler/compare/rattler_solve-v11.2.3...rattler_solve-v12.0.0) - 2026-10-27
 
 ### Added

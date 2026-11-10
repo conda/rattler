@@ -17,6 +17,7 @@ use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
     ChannelPriority, ExcludeNewer, SolveError, SolveStrategy, SolverImpl, SolverTask,
 };
+use rstest::rstest;
 use url::Url;
 
 mod conditional_tests;
@@ -293,6 +294,26 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     });
     &REPO_DATA
 }
+fn duplicate_test_record(filename: &str) -> RepoDataRecord {
+    let identifier = DistArchiveIdentifier::try_from_filename(filename).unwrap();
+    RepoDataRecord {
+        package_record: PackageRecord {
+            subdir: "noarch".into(),
+            sha256: Some(
+                rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(b"original"),
+            ),
+            ..PackageRecord::new(
+                identifier.identifier.name.parse().unwrap(),
+                identifier.identifier.version.parse::<Version>().unwrap(),
+                identifier.identifier.build_string.parse().unwrap(),
+            )
+        },
+        identifier,
+        url: Url::parse(&format!("https://example.com/noarch/{filename}")).unwrap(),
+        channel: Some("https://example.com".into()),
+    }
+}
+
 macro_rules! solver_backend_tests {
     ($T:path) => {
         use itertools::Itertools;
@@ -593,18 +614,88 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_duplicate_record() {
-            use rattler_solve::SolverImpl;
+        fn test_identical_duplicate_records() {
+            use rattler_conda_types::MatchSpec;
+            use rattler_solve::{SolverImpl, SolverTask};
+            for filename in [
+                "duplicate-probe-1.0-0.conda",
+                "duplicate_probe-1.0-py3-none-any.whl",
+            ] {
+                let record = super::duplicate_test_record(filename);
+                let records = vec![record.clone(), record.clone(), record.clone()];
+                let task = SolverTask {
+                    specs: vec![
+                        MatchSpec::from_str(
+                            record.package_record.name.as_normalized(),
+                            ParseStrictness::Strict,
+                        )
+                        .unwrap(),
+                    ],
+                    ..SolverTask::from_iter([&records])
+                };
+                let result = <$T>::default().solve(task).unwrap();
+                assert_eq!(result.records, vec![record]);
+            }
+        }
 
-            let mut records = super::read_repodata(&dummy_channel_json_path());
-            records.push(records[0].clone());
+        #[test]
+        fn test_conflicting_duplicate_records() {
+            use rattler_solve::{SolverImpl, SolverTask};
+            for filename in [
+                "duplicate-probe-1.0-0.conda",
+                "duplicate_probe-1.0-py3-none-any.whl",
+            ] {
+                let original = super::duplicate_test_record(filename);
+                for field in ["dependencies", "checksum", "url", "channel"] {
+                    let mut conflicting = original.clone();
+                    match field {
+                        "dependencies" => conflicting
+                            .package_record
+                            .depends
+                            .push("different-dependency".into()),
+                        "checksum" => {
+                            conflicting.package_record.sha256 = Some(
+                                rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(
+                                    b"different",
+                                ),
+                            )
+                        }
+                        "url" => conflicting.url = "https://other.example/package".parse().unwrap(),
+                        "channel" => conflicting.channel = Some("https://other.example".into()),
+                        _ => unreachable!(),
+                    }
+                    for records in [
+                        vec![original.clone(), conflicting.clone()],
+                        vec![conflicting.clone(), original.clone()],
+                    ] {
+                        let result = <$T>::default().solve(SolverTask::from_iter([&records]));
+                        assert!(
+                            matches!(&result, Err(SolveError::DuplicateRecords(_))),
+                            "expected duplicate conflict for {field}: {result:?}"
+                        );
+                    }
+                }
+            }
+        }
 
-            let task = rattler_solve::SolverTask::from_iter([&records]);
-
-            let result = <$T>::default().solve(task);
-            match result {
-                Err(rattler_solve::SolveError::DuplicateRecords(_)) => {}
-                _ => panic!("expected a DuplicateRecord error"),
+        #[test]
+        fn test_identical_duplicates_preserve_archive_preference() {
+            use rattler_conda_types::MatchSpec;
+            use rattler_solve::{SolverImpl, SolverTask};
+            let conda = super::duplicate_test_record("duplicate-probe-1.0-0.conda");
+            let tar = super::duplicate_test_record("duplicate-probe-1.0-0.tar.bz2");
+            for records in [
+                vec![tar.clone(), conda.clone(), conda.clone()],
+                vec![conda.clone(), tar, conda.clone()],
+            ] {
+                let task = SolverTask {
+                    specs: vec![
+                        MatchSpec::from_str("duplicate-probe", ParseStrictness::Strict).unwrap(),
+                    ],
+                    ..SolverTask::from_iter([&records])
+                };
+                let result = <$T>::default().solve(task).unwrap();
+                assert_eq!(result.records, vec![conda.clone()]);
             }
         }
 
@@ -850,6 +941,11 @@ mod libsolv_c {
     }
 
     #[test]
+    fn test_additional_packages() {
+        crate::solver_case_tests::solve_additional_packages::<rattler_solve::libsolv_c::Solver>();
+    }
+
+    #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, RepoDataRecord};
@@ -888,6 +984,7 @@ mod libsolv_c {
                 specs,
                 constraints: Vec::new(),
                 pinned_packages: Vec::new(),
+                additional_packages: Vec::new(),
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
@@ -968,6 +1065,14 @@ mod resolvo {
         crate::multichannel_tests::multichannel_channel_specific_specs::<
             rattler_solve::resolvo::Solver,
         >();
+    }
+
+    /// Not part of `solver_backend_tests!` because libsolv does not support
+    /// version-first channel priority.
+    #[test]
+    fn test_multichannel_version_first_ties() {
+        crate::multichannel_tests::multichannel_version_first_ties::<rattler_solve::resolvo::Solver>(
+        );
     }
 
     /// When a single node in the conflict merges many versions, the version list
@@ -1575,6 +1680,20 @@ mod resolvo {
             rattler_solve::resolvo::Solver,
         >();
     }
+
+    #[test]
+    fn test_additional_packages() {
+        crate::solver_case_tests::solve_additional_packages::<rattler_solve::resolvo::Solver>();
+    }
+
+    /// Not part of `solver_backend_tests!` because libsolv does not support
+    /// version-first channel priority.
+    #[test]
+    fn test_additional_packages_version_first() {
+        crate::solver_case_tests::solve_additional_packages_version_first::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 }
 
 #[derive(Default)]
@@ -1903,6 +2022,85 @@ fn channel_priority_disabled() {
         repodata,
         ChannelPriority::Disabled,
     );
+}
+
+fn version_tie_channels() -> (Vec<RepoDataRecord>, Vec<RepoDataRecord>) {
+    // Both channels carry foo 1.0, the lower-priority channel with a higher
+    // build number.
+    let channel_a = vec![
+        PackageBuilder::new("foo")
+            .version("1.0")
+            .build_string("0")
+            .build_number(0)
+            .channel("channel-a")
+            .build(),
+    ];
+    let channel_b = vec![
+        PackageBuilder::new("foo")
+            .version("1.0")
+            .build_string("3")
+            .build_number(3)
+            .channel("channel-b")
+            .build(),
+    ];
+    (channel_a, channel_b)
+}
+
+/// - Disabled channel priority doesn't consult the channel, so the version tie
+/// goes to the higher build number from the lower-priority channel.
+/// - Version-first channel priority breaks the tie by the channel order before
+/// the build number, matching conda's sort order for disabled channel
+/// priority. A higher version wins under both modes regardless of the channel
+/// order.
+#[rstest]
+#[case::disabled(ChannelPriority::Disabled, "channel-b")]
+#[case::version_first(ChannelPriority::VersionFirst, "channel-a")]
+fn channel_priority_version_tie(
+    #[case] channel_priority: ChannelPriority,
+    #[case] tie_winner: &str,
+) {
+    let (channel_a, channel_b) = version_tie_channels();
+
+    let task = SolverTask {
+        specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
+        channel_priority,
+        ..SolverTask::from_iter([&channel_a, &channel_b])
+    };
+    let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].channel.as_deref(), Some(tie_winner));
+
+    let channel_b_newer = vec![
+        PackageBuilder::new("foo")
+            .version("2.0")
+            .channel("channel-b")
+            .build(),
+    ];
+    let task = SolverTask {
+        specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
+        channel_priority,
+        ..SolverTask::from_iter([&channel_a, &channel_b_newer])
+    };
+    let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].channel.as_deref(), Some("channel-b"));
+}
+
+#[cfg(feature = "libsolv_c")]
+#[test]
+fn channel_priority_version_first_unsupported_by_libsolv() {
+    let (channel_a, channel_b) = version_tie_channels();
+
+    let task = SolverTask {
+        specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
+        channel_priority: ChannelPriority::VersionFirst,
+        ..SolverTask::from_iter([&channel_a, &channel_b])
+    };
+    let result = rattler_solve::libsolv_c::Solver.solve(task);
+    assert!(matches!(
+        result,
+        Err(rattler_solve::SolveError::UnsupportedOperations(_))
+    ));
 }
 
 fn execute_dependency_driven_fall_back_test<AbstractSolver: SolverImpl + Default>() {

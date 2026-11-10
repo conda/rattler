@@ -202,6 +202,7 @@ class PrefixPathsEntry(BasePathLike):
         >>>
         ```
         """
+        return self._inner.no_link
 
     @no_link.setter
     def no_link(self, no_link: bool) -> None:

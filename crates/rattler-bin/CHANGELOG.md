@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.16](https://github.com/conda/rattler/compare/rattler-bin-v0.5.15...rattler-bin-v0.5.16) - 2026-11-06
+
+### Added
+
+- *(rattler_solve)* add version-first channel priority, matching conda's disabled sort order ([#2974](https://github.com/conda/rattler/pull/2974))
+- *(exec)* mount temporary environments via rattler_vfs ([#2618](https://github.com/conda/rattler/pull/2618))
+
+## [0.5.15](https://github.com/conda/rattler/compare/rattler-bin-v0.5.14...rattler-bin-v0.5.15) - 2026-11-04
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.5.14](https://github.com/conda/rattler/compare/rattler-bin-v0.5.13...rattler-bin-v0.5.14) - 2026-11-02
+
+### Other
+
+- *(rattler_vfs)* ergonomics, typed errors & perf ([#2808](https://github.com/conda/rattler/pull/2808))
+
+## [0.5.13](https://github.com/conda/rattler/compare/rattler-bin-v0.5.12...rattler-bin-v0.5.13) - 2026-10-30
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.5.12](https://github.com/conda/rattler/compare/rattler-bin-v0.5.11...rattler-bin-v0.5.12) - 2026-10-30
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.5.11](https://github.com/conda/rattler/compare/rattler-bin-v0.5.10...rattler-bin-v0.5.11) - 2026-10-28
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.5.10](https://github.com/conda/rattler/compare/rattler-bin-v0.5.9...rattler-bin-v0.5.10) - 2026-10-27
 
 ### Other

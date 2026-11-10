@@ -104,9 +104,9 @@ pub async fn upload_package_to_s3_with_attestation(
 fn validate_attestation_sidecar(bytes: &[u8]) -> miette::Result<()> {
     match serde_json::from_slice::<serde_json::Value>(bytes) {
         Ok(serde_json::Value::Array(bundles)) if !bundles.is_empty() => Ok(()),
-        Ok(_) => {
-            miette::bail!("attestation sidecar must be a non-empty JSON array of Sigstore bundles")
-        }
+        Ok(_) => Err(miette::miette!(
+            "attestation sidecar must be a non-empty JSON array of Sigstore bundles"
+        )),
         Err(err) => Err(miette::miette!(
             "attestation sidecar is not valid JSON: {err}"
         )),

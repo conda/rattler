@@ -52,6 +52,12 @@ impl PackageFile for PathsJson {
 }
 
 impl PathsJson {
+    /// Sorts the entries in `paths` by their `relative_path` (`_path`).
+    pub fn sort(&mut self) {
+        self.paths
+            .sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    }
+
     /// Reads the file from a package archive directory. If the `paths.json` file could not be found
     /// use the [`Self::from_deprecated_package_directory`] method as a fallback.
     pub fn from_package_directory_with_deprecated_fallback(
@@ -109,31 +115,35 @@ impl PathsJson {
             .collect();
 
         // Iterate over all files and create entries
-        Ok(Self {
-            paths: files
-                .files
-                .into_iter()
-                .map(|path| {
-                    let prefix = has_prefix.get(&path);
-                    let path_type = path_type(&path);
+        let mut paths: Vec<PathsEntry> = files
+            .files
+            .into_iter()
+            .map(|path| {
+                let prefix = has_prefix.get(&path);
+                let path_type = path_type(&path);
 
-                    match path_type {
-                        Ok(path_type) => Ok(PathsEntry {
-                            path_type,
-                            prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
-                                file_mode: entry.file_mode,
-                                placeholder: (*entry.prefix).to_owned(),
-                                experimental_offsets: None,
-                            }),
-                            no_link: no_link.contains(&path),
-                            sha256: None,
-                            size_in_bytes: None,
-                            relative_path: path,
+                match path_type {
+                    Ok(path_type) => Ok(PathsEntry {
+                        path_type,
+                        prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
+                            file_mode: entry.file_mode,
+                            placeholder: (*entry.prefix).to_owned(),
+                            experimental_offsets: None,
                         }),
-                        Err(e) => Err(e),
-                    }
-                })
-                .collect::<Result<_, _>>()?,
+                        no_link: no_link.contains(&path),
+                        sha256: None,
+                        size_in_bytes: None,
+                        relative_path: path,
+                    }),
+                    Err(e) => Err(e),
+                }
+            })
+            .collect::<Result<_, _>>()?;
+
+        paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+
+        Ok(Self {
+            paths,
             paths_version: 1,
         })
     }
@@ -694,7 +704,7 @@ fn is_no_link_default(value: &bool) -> bool {
 mod test {
     use std::path::Path;
 
-    use crate::package::{PackageFile, PrefixPlaceholder};
+    use crate::package::{Files, PackageFile, PrefixPlaceholder};
 
     use super::{
         FileMode, InvalidOffsetsError, OffsetEncoding, OffsetGroup, OffsetRanges, PathBuf,
@@ -726,7 +736,6 @@ mod test {
 
     #[test]
     pub fn roundtrip_paths_json() {
-        // TODO make sure that paths.json is sorted by `_path`!
         let package_dir = tempfile::tempdir().unwrap();
         let package_path = tools::download_and_cache_file(
             "https://conda.anaconda.org/conda-forge/win-64/mamba-1.0.0-py38hecfeebb_2.tar.bz2"
@@ -737,7 +746,15 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
+        let mut paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
+        paths_json.sort();
+        assert!(
+            paths_json
+                .paths
+                .windows(2)
+                .all(|w| w[0].relative_path <= w[1].relative_path),
+            "paths.json entries must be sorted by relative_path"
+        );
         insta::assert_yaml_snapshot!(paths_json);
     }
 
@@ -801,10 +818,85 @@ mod test {
         let mut rng = rand::rng();
         paths.shuffle(&mut rng);
 
-        insta::assert_yaml_snapshot!(PathsJson {
+        let mut paths_json = PathsJson {
             paths,
-            paths_version: 1
-        });
+            paths_version: 1,
+        };
+        paths_json.sort();
+        assert!(
+            paths_json
+                .paths
+                .windows(2)
+                .all(|w| w[0].relative_path <= w[1].relative_path)
+        );
+
+        insta::assert_yaml_snapshot!(paths_json);
+    }
+
+    #[test]
+    pub fn test_paths_json_sort() {
+        let mut paths_json = PathsJson {
+            paths: vec![
+                PathsEntry {
+                    relative_path: PathBuf::from("z/file"),
+                    path_type: PathType::HardLink,
+                    prefix_placeholder: None,
+                    no_link: false,
+                    sha256: None,
+                    size_in_bytes: None,
+                },
+                PathsEntry {
+                    relative_path: PathBuf::from("a/file"),
+                    path_type: PathType::HardLink,
+                    prefix_placeholder: None,
+                    no_link: false,
+                    sha256: None,
+                    size_in_bytes: None,
+                },
+                PathsEntry {
+                    relative_path: PathBuf::from("m/file"),
+                    path_type: PathType::HardLink,
+                    prefix_placeholder: None,
+                    no_link: false,
+                    sha256: None,
+                    size_in_bytes: None,
+                },
+            ],
+            paths_version: 1,
+        };
+        paths_json.sort();
+        assert_eq!(
+            paths_json
+                .paths
+                .iter()
+                .map(|p| p.relative_path.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["a/file", "m/file", "z/file"]
+        );
+    }
+
+    #[test]
+    pub fn test_from_deprecated_is_sorted() {
+        let files = Files {
+            files: vec![
+                PathBuf::from("z/file"),
+                PathBuf::from("a/file"),
+                PathBuf::from("m/file"),
+            ],
+        };
+        let paths_json = PathsJson::from_deprecated(files, None, None, None, |_| {
+            Ok::<_, std::io::Error>(PathType::HardLink)
+        })
+        .unwrap();
+
+        assert_eq!(
+            paths_json
+                .paths
+                .iter()
+                .map(|p| p.relative_path.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["a/file", "m/file", "z/file"]
+        );
     }
 
     #[test]

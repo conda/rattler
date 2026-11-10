@@ -1,7 +1,7 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:best-practices"],
-  enabledManagers: ["github-actions", "pixi", "cargo", "npm"],
+  enabledManagers: ["github-actions", "pixi", "cargo", "npm", "custom.regex"],
   commitMessagePrefix: "chore(ci):",
   ignorePaths: ["**/test-data/**"],
   labels: ["dependencies"],
@@ -32,6 +32,53 @@
       matchPackageNames: "rust",
       matchManagers: ["pixi"],
       enabled: false,
+    },
+    {
+      description: "Wait 14 days after a release before proposing an update. Overrides the shorter npm default from config:best-practices.",
+      matchPackageNames: ["*"],
+      minimumReleaseAge: "14 days",
+    },
+    {
+      description: "The getrandom_v03 alias in js-rattler only enables the `wasm_js` feature for transitive getrandom 0.3 dependencies (e.g. ahash), so it must stay on 0.3.",
+      matchManagers: ["cargo"],
+      matchDepNames: ["getrandom_v03"],
+      allowedVersions: "<0.4",
+    },
+    {
+      description: "TypeScript 7.0 ships no JS compiler API, which @rollup/plugin-typescript and ts-jest need. Allow 7 once TypeScript ships the API and both tools support it.",
+      matchManagers: ["npm"],
+      matchPackageNames: ["typescript"],
+      allowedVersions: "<7",
+    },
+    {
+      description: "conda-forge still builds against openssl 3 (krb5, libcurl, cmake and python require openssl <4), so the pixi environments cannot be solved with openssl 4. Allow 4 once conda-forge has migrated.",
+      matchManagers: ["pixi"],
+      matchPackageNames: ["openssl"],
+      allowedVersions: "<4",
+    },
+    {
+      description: "pyo3-ffi links the native Python library, so a build can contain only one pyo3 version. Crates that depend on pyo3 must therefore be updated together.",
+      matchManagers: ["cargo", "custom.regex"],
+      matchPackageNames: ["pyo3", "pyo3-*", "pythonize"],
+      groupName: "pyo3",
+    },
+    {
+      description: "Every pyo3-dependent crate needs the same pyo3 series, and pythonize is usually the last to support a new one. pyo3 and pyo3-async-runtimes follow pythonize releases (see customManagers). pyo3-file uses its own numbering, so it cannot follow pythonize; bump it by hand in the pyo3 group PR. Patch updates within the current series still go through.",
+      matchManagers: ["cargo"],
+      matchPackageNames: ["pyo3", "pyo3-async-runtimes", "pyo3-file"],
+      matchUpdateTypes: ["major", "minor"],
+      enabled: false,
+    },
+  ],
+  customManagers: [
+    {
+      description: "pythonize X.Y requires pyo3 X.Y and is usually released after pyo3. Take the pyo3 and pyo3-async-runtimes series from pythonize releases so the pyo3 group only moves once pythonize supports the new pyo3.",
+      customType: "regex",
+      managerFilePatterns: ["/^py-rattler/Cargo\\.toml$/"],
+      matchStrings: ["\\n(?<depName>pyo3|pyo3-async-runtimes) = \\{ version = \"(?<currentValue>[^\"]+)\""],
+      packageNameTemplate: "pythonize",
+      datasourceTemplate: "crate",
+      versioningTemplate: "cargo",
     },
   ],
   vulnerabilityAlerts: {

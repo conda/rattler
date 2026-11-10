@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.2...rattler_repodata_gateway-v0.38.3) - 2026-11-06
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.38.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.1...rattler_repodata_gateway-v0.38.2) - 2026-11-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.38.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.0...rattler_repodata_gateway-v0.38.1) - 2026-11-02
+
+### Other
+
+- updated the following local packages: rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.38.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.37.2...rattler_repodata_gateway-v0.38.0) - 2026-10-30
+
+### Fixed
+
+- *(gateway)* return only the requested package from a shard ([#3059](https://github.com/conda/rattler/pull/3059))
+- verify shards against the hash in the shard index ([#3060](https://github.com/conda/rattler/pull/3060))
+
+## [0.37.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.37.1...rattler_repodata_gateway-v0.37.2) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_cache
+
+## [0.37.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.37.0...rattler_repodata_gateway-v0.37.1) - 2026-10-28
+
+### Added
+
+- *(cache)* download and cache wheels as extracted conda packages ([#2964](https://github.com/conda/rattler/pull/2964))
+
 ## [0.37.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.36.6...rattler_repodata_gateway-v0.37.0) - 2026-10-27
 
 ### Added

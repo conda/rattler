@@ -18,11 +18,7 @@
 //! let env_hash = compute_env_hash(&lockfile, "default", platform)?;
 //! let cache = PackageCache::new(default_cache_dir()?.join("pkgs"));
 //!
-//! let config = MountConfig::new_read_only(
-//!     "/path/to/env".into(),
-//!     Transport::Auto,
-//!     env_hash,
-//! );
+//! let config = MountConfig::new("/path/to/env".into(), Transport::best(), env_hash);
 //! let handle = build_and_mount(&lockfile, "default", platform, &cache, &config).await?;
 //! // Environment is live at /path/to/env.
 //! // Dropping `handle` unmounts; call `handle.unmount().await` for explicit error handling.
@@ -38,7 +34,7 @@
 //! | macOS | NFS | NFS, FUSE (requires [macFUSE]) |
 //! | Windows | [ProjFS] | `ProjFS` |
 //!
-//! [`Transport::Auto`] selects the default for the current platform.
+//! [`Transport::best`]`()` selects the default for the current platform.
 //!
 //! **Why NFS on macOS?** FUSE on macOS requires [macFUSE], a third-party
 //! kernel extension that needs System Integrity Protection (SIP) to be
@@ -75,24 +71,34 @@ pub(crate) mod metadata_tree;
 pub mod nfs_adapter;
 pub mod overlay;
 pub mod overlay_fs;
+pub(crate) mod package_index;
 pub mod prefix_replacement;
 #[cfg(target_os = "windows")]
 pub mod projfs_adapter;
+// Not gated on Windows: it is a pure-Rust comparator (no ProjFS/`windows`
+// dependency) so its unit tests can run on non-Windows CI, which cannot compile
+// the ProjFS adapter itself. See the module docs and issue #2581.
+pub mod projfs_name_compare;
 pub mod vfs_ops;
 pub mod virtual_fs;
 
 use std::{
+    borrow::Cow,
     collections::HashMap,
+    ffi::OsString,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use metadata_tree::MetadataNode;
 use rattler::install::PythonInfo;
-use rattler::install::python_entry_point_template;
+use rattler::install::{get_windows_launcher, python_entry_point_template};
 use rattler_cache::package_cache::PackageCache;
+use rattler_conda_types::PackageRecord;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{EntryPoint, LinkJson, NoArchLinks, PackageFile, PathsJson};
+#[cfg(test)]
+use rattler_conda_types::package::PathsJson;
+use rattler_conda_types::package::{EntryPoint, PrefixPlaceholder};
 use rattler_lock::LockFile;
 use rattler_networking::LazyClient;
 use virtual_fs::VirtualFS;
@@ -181,81 +187,218 @@ pub enum MountError {
 /// For noarch Python packages, pass `python_info` to rewrite paths:
 /// `site-packages/` → `lib/pythonX.Y/site-packages/` and
 /// `python-scripts/` → `bin/`.
+#[cfg(test)]
 pub(crate) fn path_parse(
     paths_json: &PathsJson,
     cache_path: &Path,
     python_info: Option<&PythonInfo>,
     env_paths: &mut Vec<MetadataNode>,
     directory_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
 ) {
     let cachepath: Arc<Path> = cache_path.into();
+    let mut parent_memo = None;
 
     for path in &paths_json.paths {
-        // For noarch Python packages, rewrite site-packages/ and python-scripts/ paths
-        let (virtual_path, cache_prefix_override) = match python_info {
-            Some(info) => {
-                let rewritten = info.get_python_noarch_target_path(&path.relative_path);
-                if rewritten.as_ref() == path.relative_path {
-                    (path.relative_path.clone(), None)
-                } else {
-                    let original_parent = path
-                        .relative_path
-                        .parent()
-                        .map_or_else(|| PathBuf::from("."), |p| PathBuf::from(".").join(p));
-                    (rewritten.into_owned(), Some(original_parent))
-                }
-            }
-            None => (path.relative_path.clone(), None),
-        };
-
-        let parent_directory = virtual_path.parent().unwrap_or(Path::new("."));
-        let mut parent_index = 0;
-
-        for component in parent_directory.components() {
-            let current_path = env_paths[parent_index]
-                .as_directory()
-                .expect("parent is always a directory")
-                .prefix_path
-                .join(component);
-
-            if let Some(&index) = directory_indices.get(&current_path) {
-                parent_index = index;
-            } else {
-                let new_dir = MetadataNode::new_directory(current_path.clone(), parent_index);
-                let child_index = env_paths.len();
-
-                env_paths.push(new_dir);
-                env_paths[parent_index]
-                    .as_directory_mut()
-                    .expect("parent is a directory")
-                    .children
-                    .push(child_index);
-
-                directory_indices.insert(current_path, child_index);
-                parent_index = child_index;
-            }
-        }
-
-        let file_name = virtual_path.file_name().expect("files always have names");
-
-        let file_index = env_paths.len();
+        let placed = place_package_file(
+            &path.relative_path,
+            python_info,
+            env_paths,
+            directory_indices,
+            &mut parent_memo,
+        );
         let mut file_entry = MetadataNode::new_file(
-            file_name.into(),
-            parent_index,
+            placed.file_name,
+            placed.parent_index,
             cachepath.clone(),
             path.path_type,
             path.prefix_placeholder.clone(),
         );
-        if let Some(ref override_path) = cache_prefix_override {
-            file_entry.as_file_mut().unwrap().cache_prefix_path = Some(override_path.clone());
-        }
-        env_paths.push(file_entry);
+        file_entry.as_file_mut().unwrap().cache_prefix_path = placed.cache_prefix_override;
+        upsert_file_node(
+            file_entry,
+            placed.parent_index,
+            placed.file_key,
+            env_paths,
+            file_indices,
+        );
+    }
+}
 
+/// Like [`path_parse`], from a package's index (see [`package_index`]): the
+/// file list, attributes and placeholder locations come from the index, so
+/// nothing has to be parsed, `stat`ed or scanned.
+pub(crate) fn index_parse(
+    index: &package_index::IndexBytes,
+    cache_path: &Path,
+    python_info: Option<&PythonInfo>,
+    env_paths: &mut Vec<MetadataNode>,
+    directory_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
+) {
+    let cachepath: Arc<Path> = cache_path.into();
+    let mut parent_memo = None;
+
+    for file in index.files() {
+        let placed = place_package_file(
+            Path::new(file.path()),
+            python_info,
+            env_paths,
+            directory_indices,
+            &mut parent_memo,
+        );
+        let (placeholder, scan) = match file.placeholder() {
+            Some((placeholder, file_mode, scan)) => (
+                Some(PrefixPlaceholder {
+                    file_mode,
+                    placeholder: placeholder.to_string(),
+                    experimental_offsets: None,
+                }),
+                scan,
+            ),
+            None => (None, None),
+        };
+        let mut file_entry = MetadataNode::new_file(
+            placed.file_name,
+            placed.parent_index,
+            cachepath.clone(),
+            file.path_type(),
+            placeholder,
+        );
+        let node = file_entry.as_file_mut().unwrap();
+        node.cache_prefix_path = placed.cache_prefix_override;
+        node.stat = file.stat();
+        node.scan = scan;
+        upsert_file_node(
+            file_entry,
+            placed.parent_index,
+            placed.file_key,
+            env_paths,
+            file_indices,
+        );
+    }
+}
+
+/// Identifies a file in the tree: its parent directory's index and its name.
+/// Cheaper to hash than the file's full path.
+type FileKey = (usize, OsString);
+
+/// Maps every file in the tree to its node, for clobber resolution (see
+/// [`upsert_file_node`]).
+pub(crate) type FileIndices = HashMap<FileKey, usize>;
+
+/// Where a package file goes in the tree, see [`place_package_file`].
+struct PlacedFile {
+    parent_index: usize,
+    file_name: OsString,
+    /// The file's directory in the package cache when it differs from its
+    /// directory in the environment (noarch Python files).
+    cache_prefix_override: Option<PathBuf>,
+    /// The file's identity in the environment, for clobber detection.
+    file_key: FileKey,
+}
+
+/// Find (creating as needed) the directory a package file at `relative_path`
+/// goes into, applying the noarch Python path rewriting.
+///
+/// `parent_memo` remembers the last directory resolved. Package file lists
+/// are sorted, so consecutive files mostly share a directory and skip walking
+/// (and hashing) every path component again.
+fn place_package_file(
+    relative_path: &Path,
+    python_info: Option<&PythonInfo>,
+    env_paths: &mut Vec<MetadataNode>,
+    directory_indices: &mut HashMap<PathBuf, usize>,
+    parent_memo: &mut Option<(PathBuf, usize)>,
+) -> PlacedFile {
+    // For noarch Python packages, rewrite site-packages/ and python-scripts/ paths
+    let (virtual_path, cache_prefix_override) = match python_info {
+        Some(info) => {
+            let rewritten = info.get_python_noarch_target_path(relative_path);
+            if rewritten.as_ref() == relative_path {
+                (Cow::Borrowed(relative_path), None)
+            } else {
+                let original_parent = relative_path
+                    .parent()
+                    .map_or_else(|| PathBuf::from("."), |p| PathBuf::from(".").join(p));
+                (rewritten, Some(original_parent))
+            }
+        }
+        None => (Cow::Borrowed(relative_path), None),
+    };
+
+    let parent_directory = virtual_path.parent().unwrap_or(Path::new("."));
+    let parent_index = match parent_memo {
+        Some((memo_path, memo_index)) if memo_path.as_path() == parent_directory => *memo_index,
+        _ => {
+            let mut parent_index = 0;
+            for component in parent_directory.components() {
+                let current_path = env_paths[parent_index]
+                    .as_directory()
+                    .expect("parent is always a directory")
+                    .prefix_path
+                    .join(component);
+
+                if let Some(&index) = directory_indices.get(&current_path) {
+                    parent_index = index;
+                } else {
+                    let new_dir = MetadataNode::new_directory(current_path.clone(), parent_index);
+                    let child_index = env_paths.len();
+
+                    env_paths.push(new_dir);
+                    env_paths[parent_index]
+                        .as_directory_mut()
+                        .expect("parent is a directory")
+                        .children
+                        .push(child_index);
+
+                    directory_indices.insert(current_path, child_index);
+                    parent_index = child_index;
+                }
+            }
+            *parent_memo = Some((parent_directory.to_path_buf(), parent_index));
+            parent_index
+        }
+    };
+
+    let file_name = virtual_path.file_name().expect("files always have names");
+
+    // Clobber key: the file's virtual path under the prefix.
+    let file_key = (parent_index, file_name.to_os_string());
+
+    PlacedFile {
+        parent_index,
+        file_name: file_name.to_os_string(),
+        cache_prefix_override,
+        file_key,
+    }
+}
+
+/// Insert `node` as a child of `parent_index`, or replace the file already at
+/// `file_key`.
+///
+/// Clobbered paths (the same path shipped by two packages) resolve last-writer-
+/// wins. The caller feeds packages in topological order (see
+/// [`MetadataTree::build`]), so the winner matches what `rattler`'s installer
+/// keeps after `unclobber`. Replacing in place keeps `readdir` duplicate-free.
+fn upsert_file_node(
+    node: MetadataNode,
+    parent_index: usize,
+    file_key: FileKey,
+    env_paths: &mut Vec<MetadataNode>,
+    file_indices: &mut FileIndices,
+) {
+    if let Some(&existing) = file_indices.get(&file_key) {
+        env_paths[existing] = node;
+    } else {
+        let file_index = env_paths.len();
+        env_paths.push(node);
         env_paths[parent_index]
             .as_directory_mut()
             .expect("parent is a directory")
             .children
             .push(file_index);
+        file_indices.insert(file_key, file_index);
     }
 }
 
@@ -282,53 +425,160 @@ fn ensure_directory(
     child_index
 }
 
-/// Generate noarch python entry point scripts and add them as virtual files
-/// in the metadata tree.
+/// A single materialized file backing a Python entry point.
+pub(crate) struct EntryPointArtifact {
+    /// File name within the entry-point directory (`bin/` or `Scripts/`).
+    pub file_name: OsString,
+    /// Fully materialized file contents.
+    pub content: Vec<u8>,
+}
+
+/// Entry-point artifact(s) for `ep`, mirroring `rattler`'s installer:
+/// on Unix a single shebang script named after the command; on Windows a
+/// `<cmd>-script.py` plus a `<cmd>.exe` launcher. Branches on `platform`
+/// (not `cfg!`) so the Windows layout is testable on any host.
+pub(crate) fn entry_point_artifacts(
+    target_prefix: &str,
+    ep: &EntryPoint,
+    python_info: &PythonInfo,
+    platform: Subdir,
+) -> Vec<EntryPointArtifact> {
+    if platform.is_windows() {
+        let script = python_entry_point_template(target_prefix, true, ep, python_info);
+        vec![
+            EntryPointArtifact {
+                file_name: format!("{}-script.py", ep.command).into(),
+                content: script.into_bytes(),
+            },
+            EntryPointArtifact {
+                file_name: format!("{}.exe", ep.command).into(),
+                content: get_windows_launcher(&platform).to_vec(),
+            },
+        ]
+    } else {
+        let script = python_entry_point_template(target_prefix, false, ep, python_info);
+        vec![EntryPointArtifact {
+            file_name: ep.command.as_str().into(),
+            content: script.into_bytes(),
+        }]
+    }
+}
+
+/// Generate noarch python entry point scripts and add them as virtual files.
+///
+/// The target directory (`bin/` on Unix, `Scripts/` on Windows) comes from
+/// `python_info.bin_dir`. Entries go through [`upsert_file_node`], so a
+/// collision with a real file follows the same last-writer-wins clobber rule.
 pub(crate) fn add_entry_points(
     entry_points: &[EntryPoint],
     target_prefix: &str,
     python_info: &PythonInfo,
+    platform: Subdir,
     env_paths: &mut Vec<MetadataNode>,
     directory_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
 ) {
-    let bin_dir = PathBuf::from("./bin");
-    let bin_index = ensure_directory(bin_dir, 0, env_paths, directory_indices);
+    // `./bin` (Unix) or `./Scripts` (Windows), matching the tree's convention.
+    let bin_dir = Path::new(".").join(&python_info.bin_dir);
+    let bin_index = ensure_directory(bin_dir.clone(), 0, env_paths, directory_indices);
 
     for ep in entry_points {
-        let content = python_entry_point_template(target_prefix, false, ep, python_info);
-        let file_index = env_paths.len();
-        env_paths.push(MetadataNode::new_virtual_file(
-            ep.command.as_str().into(),
-            bin_index,
-            content.into_bytes(),
-        ));
-        env_paths[bin_index]
-            .as_directory_mut()
-            .expect("bin is a directory")
-            .children
-            .push(file_index);
+        for artifact in entry_point_artifacts(target_prefix, ep, python_info, platform) {
+            let file_key = (bin_index, artifact.file_name.clone());
+            let node =
+                MetadataNode::new_virtual_file(artifact.file_name, bin_index, artifact.content);
+            upsert_file_node(node, bin_index, file_key, env_paths, file_indices);
+        }
     }
 }
 
-/// Initialise the root directory and index for a new virtual filesystem tree.
-pub(crate) fn new_empty_tree() -> (Vec<MetadataNode>, HashMap<PathBuf, usize>) {
+/// Initialise a new virtual filesystem tree, returning
+/// `(env_paths, directory_indices, file_indices)`. The two index maps track
+/// directory and file node indices by virtual path; `file_indices` drives
+/// clobber resolution (see [`upsert_file_node`]).
+pub(crate) fn new_empty_tree() -> (Vec<MetadataNode>, HashMap<PathBuf, usize>, FileIndices) {
     let env_paths = vec![MetadataNode::new_directory(PathBuf::from("."), 0)];
     let mut directory_indices = HashMap::new();
     directory_indices.insert(PathBuf::from("."), 0);
-    (env_paths, directory_indices)
+    let file_indices = HashMap::new();
+    (env_paths, directory_indices, file_indices)
 }
 
 // ---------------------------------------------------------------------------
 // Library API: mount orchestration
 // ---------------------------------------------------------------------------
 
-/// Opaque metadata tree produced by [`build_metadata_tree`].
+/// Opaque metadata tree produced by [`MetadataTree::build`].
 ///
 /// Pass to [`mount`] or [`build_and_mount`]; the internal representation is
 /// not stable and is intentionally not exposed. The newtype wrapper means
 /// downstream consumers cannot construct one directly — guaranteeing every
-/// mount went through `build_metadata_tree`'s validation.
+/// mount went through [`MetadataTree::build`]'s validation.
 pub struct MetadataTree(pub(crate) Vec<MetadataNode>);
+
+impl MetadataTree {
+    /// Build the in-memory metadata tree from a parsed lock file.
+    ///
+    /// Fetches packages from `package_cache` as needed, reads `PathsJson` for
+    /// each, and constructs the virtual directory tree with noarch Python path
+    /// rewriting and entry-point generation.
+    ///
+    /// Caller responsibilities:
+    /// - Parse the lock file once via [`LockFile::from_path`].
+    /// - Pick a [`Subdir`] (usually [`Subdir::current()`]).
+    /// - Construct a [`PackageCache`] (commonly via
+    ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from
+    ///   this function lets pixi share its own cache and lets tests use a temp
+    ///   dir.
+    pub async fn build(
+        lockfile: &LockFile,
+        environment_name: &str,
+        platform: Subdir,
+        package_cache: &PackageCache,
+        mount_point: &Path,
+    ) -> anyhow::Result<Self> {
+        build_metadata_tree(
+            lockfile,
+            environment_name,
+            platform,
+            package_cache,
+            default_client(),
+            mount_point,
+        )
+        .await
+    }
+
+    /// Like [`MetadataTree::build`], but downloads missing packages with
+    /// `client` instead of a default client without authentication, mirrors
+    /// or retries. Pass the client used for the rest of the operation (e.g.
+    /// the one that fetched repodata) so packages from authenticated channels
+    /// can be fetched and offline mode is respected.
+    pub async fn build_with_client(
+        lockfile: &LockFile,
+        environment_name: &str,
+        platform: Subdir,
+        package_cache: &PackageCache,
+        client: impl Into<LazyClient>,
+        mount_point: &Path,
+    ) -> anyhow::Result<Self> {
+        build_metadata_tree(
+            lockfile,
+            environment_name,
+            platform,
+            package_cache,
+            client.into(),
+            mount_point,
+        )
+        .await
+    }
+}
+
+/// A client without middleware, constructed on first use: building one eagerly
+/// walks the system certificate store (seconds on macOS), which a warm-cache
+/// mount never needs.
+fn default_client() -> LazyClient {
+    LazyClient::new(reqwest_middleware::ClientWithMiddleware::default)
+}
 
 /// Transport backend for the virtual filesystem.
 ///
@@ -336,9 +586,6 @@ pub struct MetadataTree(pub(crate) Vec<MetadataNode>);
 /// has a different default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
-    /// Auto-detect the best backend for the current platform: FUSE on Linux,
-    /// NFS on macOS, `ProjFS` on Windows.
-    Auto,
     /// `NFSv3` userspace server on localhost. Works on all platforms without
     /// kernel extensions. On Windows, constrained to port 2049 and drive letters.
     ///
@@ -346,7 +593,7 @@ pub enum Transport {
     /// granted in unprivileged user namespaces. The adapter probes for
     /// passwordless `sudo` before attempting the mount and fails fast if it's
     /// not available. On Linux, prefer [`Transport::Fuse`] unless you
-    /// specifically need NFS parity with macOS — [`Transport::Auto`] already
+    /// specifically need NFS parity with macOS — [`Transport::best`]`()` already
     /// picks FUSE.
     Nfs,
     /// FUSE via libfuse3 (Linux) or macFUSE (macOS, requires `fuse` feature).
@@ -358,29 +605,27 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// Short name for state file tracking.
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Nfs => "nfs",
-            Self::Fuse => "fuse",
-            Self::ProjFs => "projfs",
+    /// The best transport for the current platform: `ProjFS` on Windows, NFS on
+    /// macOS, FUSE elsewhere (Linux).
+    ///
+    /// Prefer this over a catch-all `Auto` enum variant so every [`Transport`]
+    /// value names a concrete backend and callers never have to resolve one.
+    pub fn best() -> Self {
+        if cfg!(target_os = "windows") {
+            Self::ProjFs
+        } else if cfg!(target_os = "macos") {
+            Self::Nfs
+        } else {
+            Self::Fuse
         }
     }
 
-    /// Resolve `Auto` to the platform-appropriate transport.
-    pub fn resolve(self) -> Self {
+    /// Short name for state file tracking.
+    pub fn name(self) -> &'static str {
         match self {
-            Self::Auto => {
-                if cfg!(target_os = "windows") {
-                    Self::ProjFs
-                } else if cfg!(target_os = "macos") {
-                    Self::Nfs
-                } else {
-                    Self::Fuse
-                }
-            }
-            other => other,
+            Self::Nfs => "nfs",
+            Self::Fuse => "fuse",
+            Self::ProjFs => "projfs",
         }
     }
 
@@ -389,8 +634,7 @@ impl Transport {
     /// Use this at config-parse time to reject invalid combinations early
     /// instead of waiting for [`mount`] to fail at runtime.
     pub fn is_available(self) -> bool {
-        match self.resolve() {
-            Self::Auto => unreachable!("resolve() never returns Auto"),
+        match self {
             Self::Fuse => cfg!(any(target_os = "linux", feature = "fuse")),
             Self::Nfs => cfg!(feature = "nfs"),
             Self::ProjFs => cfg!(target_os = "windows"),
@@ -452,10 +696,16 @@ pub enum OverlayMismatch {
 /// Configuration for mounting a virtual environment.
 ///
 /// Marked `#[non_exhaustive]` so new fields can be added without a `SemVer`
-/// break. Construct via [`MountConfig::new_read_only`] or
-/// [`MountConfig::new_writable`], optionally chaining
-/// [`with_allow_other`](MountConfig::with_allow_other) or
-/// [`with_overlay_mismatch`](MountConfig::with_overlay_mismatch).
+/// break. Start from [`MountConfig::new`] (read-only) and customize with the
+/// chained `with_*` builders or the `&mut self` `set_*` setters, e.g.
+///
+/// ```no_run
+/// # use std::path::PathBuf;
+/// # use rattler_vfs::{MountConfig, Mode, Transport, OverlayMismatch};
+/// let config = MountConfig::new("/env".into(), Transport::best(), "sha256:…".into())
+///     .with_writable(PathBuf::from("/overlay"))
+///     .with_overlay_mismatch(OverlayMismatch::Adopt);
+/// ```
 #[non_exhaustive]
 pub struct MountConfig {
     /// Directory where the virtual environment will appear.
@@ -464,7 +714,7 @@ pub struct MountConfig {
     /// Read-only or writable, and where the overlay lives.
     pub mode: Mode,
 
-    /// Transport backend. Use [`Transport::Auto`] to let the platform decide.
+    /// Transport backend. Use [`Transport::best`]`()` to let the platform decide.
     pub transport: Transport,
 
     /// Identity hash of the resolved environment, used to detect when the
@@ -482,8 +732,12 @@ pub struct MountConfig {
 }
 
 impl MountConfig {
-    /// Read-only mount. Writes return `EROFS`.
-    pub fn new_read_only(mount_point: PathBuf, transport: Transport, env_hash: String) -> Self {
+    /// A read-only mount config with default options. Customize it with the
+    /// `with_*` (chained, by value) or `set_*` (`&mut self`) builders.
+    ///
+    /// Read-only is the safe default; call [`with_writable`](Self::with_writable)
+    /// or [`with_mode`](Self::with_mode) for a writable overlay.
+    pub fn new(mount_point: PathBuf, transport: Transport, env_hash: String) -> Self {
         Self {
             mount_point,
             mode: Mode::ReadOnly,
@@ -494,58 +748,50 @@ impl MountConfig {
         }
     }
 
-    /// Read-only if the transport supports it, otherwise writable.
-    ///
-    /// On FUSE/NFS this behaves like [`Self::new_read_only`]. On `ProjFS` —
-    /// which cannot enforce read-only, since it has no pre-creation
-    /// notification — it falls through to a writable mount (logging a warning)
-    /// instead of erroring with [`MountError::ProjFsReadOnlyUnsupported`]. Use
-    /// this for cross-platform configs where `mount-read-only = true` should
-    /// still work on Windows.
-    pub fn new_read_only_if_supported(
-        mount_point: PathBuf,
-        transport: Transport,
-        env_hash: String,
-    ) -> Self {
-        Self {
-            mount_point,
-            mode: Mode::ReadOnlyIfSupported,
-            transport,
-            env_hash,
-            allow_other: false,
-            overlay_mismatch: OverlayMismatch::Error,
-        }
+    /// Set the read-only/writable [`Mode`] (chained).
+    pub fn with_mode(mut self, mode: Mode) -> Self {
+        self.mode = mode;
+        self
     }
 
-    /// Writable mount with a persistent COW overlay.
-    ///
-    /// `overlay_dir` is required for FUSE/NFS and must be a separate directory
-    /// from `mount_point`. Pass `None` for `ProjFS` — `ProjFS` uses the mount
-    /// point itself as the virtualization root.
-    pub fn new_writable(
-        mount_point: PathBuf,
-        overlay_dir: Option<PathBuf>,
-        transport: Transport,
-        env_hash: String,
-    ) -> Self {
-        Self {
-            mount_point,
-            mode: Mode::Writable { overlay_dir },
-            transport,
-            env_hash,
-            allow_other: false,
-            overlay_mismatch: OverlayMismatch::Error,
-        }
+    /// Make the mount writable with a persistent COW overlay at `overlay_dir`
+    /// (chained). Convenience for `with_mode(Mode::Writable { overlay_dir:
+    /// Some(overlay_dir) })`; for `ProjFS`, use [`with_mode`](Self::with_mode)
+    /// with `overlay_dir: None`.
+    pub fn with_writable(mut self, overlay_dir: PathBuf) -> Self {
+        self.mode = Mode::Writable {
+            overlay_dir: Some(overlay_dir),
+        };
+        self
     }
 
-    /// Allow other users to access the mount (FUSE only).
+    /// Allow other users to access the mount (FUSE only) (chained).
     pub fn with_allow_other(mut self, allow_other: bool) -> Self {
         self.allow_other = allow_other;
         self
     }
 
-    /// Set what to do when the overlay was created for a different environment.
+    /// Set what to do when the overlay was created for a different environment
+    /// (chained).
     pub fn with_overlay_mismatch(mut self, overlay_mismatch: OverlayMismatch) -> Self {
+        self.overlay_mismatch = overlay_mismatch;
+        self
+    }
+
+    /// Set the [`Mode`] in place, returning `&mut Self` for chaining.
+    pub fn set_mode(&mut self, mode: Mode) -> &mut Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Set `allow_other` in place, returning `&mut Self` for chaining.
+    pub fn set_allow_other(&mut self, allow_other: bool) -> &mut Self {
+        self.allow_other = allow_other;
+        self
+    }
+
+    /// Set `overlay_mismatch` in place, returning `&mut Self` for chaining.
+    pub fn set_overlay_mismatch(&mut self, overlay_mismatch: OverlayMismatch) -> &mut Self {
         self.overlay_mismatch = overlay_mismatch;
         self
     }
@@ -617,6 +863,9 @@ impl MountHandle {
     }
 }
 
+/// A fetched and indexed conda package: `(cache_path, index, is_noarch_python)`.
+type FetchedPackage = (PathBuf, package_index::IndexBytes, bool);
+
 /// Build the in-memory metadata tree from a parsed lock file.
 ///
 /// Fetches packages from `package_cache` as needed, reads `PathsJson` for each,
@@ -629,11 +878,12 @@ impl MountHandle {
 /// - Construct a [`PackageCache`] (commonly via
 ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from this
 ///   function lets pixi share its own cache and lets tests use a temp dir.
-pub async fn build_metadata_tree(
+pub(crate) async fn build_metadata_tree(
     lockfile: &LockFile,
     environment_name: &str,
     platform: Subdir,
     package_cache: &PackageCache,
+    client: LazyClient,
     mount_point: &Path,
 ) -> anyhow::Result<MetadataTree> {
     let environment =
@@ -651,6 +901,23 @@ pub async fn build_metadata_tree(
         })?
         .collect();
 
+    // pypi packages aren't served by the VFS (they live in a separate wheel
+    // cache, installed by pip/uv). Skipping them silently would produce a
+    // mount that looks complete but isn't, so warn loudly and list them.
+    let dropped_pypi: Vec<String> = package_refs
+        .iter()
+        .filter_map(|p| p.as_pypi())
+        .map(|p| {
+            let version = p
+                .version()
+                .map_or_else(|| "<unknown version>".to_string(), ToString::to_string);
+            format!("{} {}", p.name(), version)
+        })
+        .collect();
+    if !dropped_pypi.is_empty() {
+        tracing::warn!("{}", format_dropped_pypi_warning(&dropped_pypi));
+    }
+
     let python_info = package_refs
         .iter()
         .filter_map(|p| p.as_binary_conda())
@@ -659,15 +926,8 @@ pub async fn build_metadata_tree(
         .transpose()
         .map_err(|e| anyhow::anyhow!("failed to get python info: {e}"))?;
 
-    let (mut env_paths, mut directory_indices) = new_empty_tree();
+    let (mut env_paths, mut directory_indices, mut file_indices) = new_empty_tree();
     let mount_str = mount_point.to_string_lossy().to_string();
-
-    // Build a single lazily-initialized HTTP client for the whole package loop.
-    // `LazyClient::default()` forces construction eagerly, which on macOS walks
-    // the keychain via `rustls_native_certs` and takes several seconds. Using
-    // `LazyClient::new` defers that work until the first cache miss, so
-    // warm-cache mounts skip it entirely.
-    let client = LazyClient::new(reqwest_middleware::ClientWithMiddleware::default);
 
     // Validate all packages up front so we can parallelize fetching.
     let mut conda_packages: Vec<_> = package_refs
@@ -684,13 +944,21 @@ pub async fn build_metadata_tree(
             .cmp(&a.package_record.size.unwrap_or(0))
     });
 
-    // Fetch + parse packages in parallel. The tree mutation (path_parse)
-    // stays serial because env_paths/directory_indices are shared mutable
-    // state — the downloads and JSON parses are the expensive parts.
+    let total_packages = conda_packages.len();
+    tracing::info!(
+        environment = environment_name,
+        platform = %platform,
+        packages = total_packages,
+        "building VFS metadata tree"
+    );
+
+    // Fetch + parse packages in parallel (the expensive part); tree mutation
+    // stays serial. Each task carries its `conda_packages` index so results can
+    // be reordered deterministically regardless of completion order.
     let concurrency = Arc::new(tokio::sync::Semaphore::new(16));
     let mut join_set = tokio::task::JoinSet::new();
 
-    for package_data in &conda_packages {
+    for (idx, package_data) in conda_packages.iter().enumerate() {
         let cache = package_cache.clone();
         let client = client.clone();
         let record = package_data.package_record.clone();
@@ -721,46 +989,81 @@ pub async fn build_metadata_tree(
                 )
                 .await?;
 
-            // Parse paths.json inside the spawned task to avoid blocking the
-            // main runtime thread.
+            // Load (or build) the package's index off the async runtime: a
+            // first mount of a package reads and scans its files.
             let path = cache_metadata.path().to_path_buf();
-            let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(&path)?;
+            let index = tokio::task::spawn_blocking({
+                let path = path.clone();
+                move || package_index::load_or_build(&path, platform)
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("indexing task failed: {e}"))??;
 
-            // For noarch python packages, also load link.json for entry points.
-            let entry_points: Vec<EntryPoint> = if is_noarch_python {
-                LinkJson::from_package_directory(&path)
-                    .ok()
-                    .and_then(|lj| match lj.noarch {
-                        NoArchLinks::Python(ep) => Some(ep.entry_points),
-                        NoArchLinks::Generic => None,
-                    })
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            Ok::<_, anyhow::Error>((path, paths_json, is_noarch_python, entry_points))
+            Ok::<_, anyhow::Error>((idx, path, index, is_noarch_python))
         });
     }
 
-    // Collect results and build the tree serially.
+    // Collect results by their `conda_packages` index. `join_next` yields in
+    // fetch-completion order; indexing here lets the build below run in a
+    // deterministic order so clobbering resolves the same way every run.
+    let mut fetched: Vec<Option<FetchedPackage>> =
+        (0..conda_packages.len()).map(|_| None).collect();
+    let mut fetched_count = 0usize;
     while let Some(result) = join_set.join_next().await {
-        let (cache_path, paths_json, is_noarch_python, entry_points) =
+        let (idx, cache_path, index, is_noarch_python) =
             result.map_err(|e| anyhow::anyhow!("fetch task failed: {e}"))??;
+        fetched[idx] = Some((cache_path, index, is_noarch_python));
+        fetched_count += 1;
+        tracing::debug!("fetched {fetched_count}/{total_packages} packages");
+    }
+
+    // Size the tree for every package up front: growing the node list and
+    // the clobber map while inserting thousands of files means repeated
+    // rehashing, copying and page faults.
+    let total_files: usize = fetched
+        .iter()
+        .flatten()
+        .map(|(_, index, _)| index.file_count())
+        .sum();
+    env_paths.reserve(total_files + total_files / 4);
+    file_indices.reserve(total_files);
+    directory_indices.reserve(total_files / 4);
+
+    // Build in topological order so clobbering resolves like the installer:
+    // the last (most dependent / noarch) package wins in `upsert_file_node`.
+    let records: Vec<PackageRecord> = conda_packages
+        .iter()
+        .map(|p| p.package_record.clone())
+        .collect();
+    for idx in topological_order_of_records(&records) {
+        let Some((cache_path, index, is_noarch_python)) = fetched[idx].take() else {
+            continue;
+        };
 
         let noarch_python_info = if is_noarch_python {
             python_info.as_ref()
         } else {
             None
         };
-        path_parse(
-            &paths_json,
+        index_parse(
+            &index,
             &cache_path,
             noarch_python_info,
             &mut env_paths,
             &mut directory_indices,
+            &mut file_indices,
         );
 
+        // Only noarch Python packages get entry points, like the installer.
+        let entry_points: Vec<EntryPoint> = index
+            .entry_points()
+            .filter(|_| is_noarch_python)
+            .map(|(command, module, function)| EntryPoint {
+                command: command.to_string(),
+                module: module.to_string(),
+                function: function.to_string(),
+            })
+            .collect();
         if let Some(ref python_info) = python_info
             && !entry_points.is_empty()
         {
@@ -768,23 +1071,75 @@ pub async fn build_metadata_tree(
                 &entry_points,
                 &mount_str,
                 python_info,
+                platform,
                 &mut env_paths,
                 &mut directory_indices,
+                &mut file_indices,
             );
         }
 
         tracing::debug!("parsed {} metadata entries", env_paths.len());
     }
 
+    tracing::info!(
+        nodes = env_paths.len(),
+        packages = total_packages,
+        "VFS metadata tree built"
+    );
     Ok(MetadataTree(env_paths))
+}
+
+/// Warning emitted when pypi packages are present but can't be served by the
+/// VFS. Factored out to be unit-testable without a live mount.
+pub(crate) fn format_dropped_pypi_warning(packages: &[String]) -> String {
+    format!(
+        "{} pypi package(s) in this environment are NOT served by the virtual \
+         filesystem and will be missing from the mount: {}. The VFS only \
+         projects conda packages; pypi wheels are installed separately by \
+         pip/uv. This environment is incomplete when mounted.",
+        packages.len(),
+        packages.join(", "),
+    )
+}
+
+/// Deterministic build order (indices into `records`) via
+/// [`PackageRecord::sort_topologically`]: dependencies before dependents,
+/// noarch packages last. Records the sort doesn't place (e.g. duplicate names,
+/// which it doesn't support) are appended so none is dropped.
+fn topological_order_of_records(records: &[PackageRecord]) -> Vec<usize> {
+    // Topological sort keys on unique names, which conda environments satisfy.
+    let mut name_to_idx: HashMap<String, usize> = HashMap::with_capacity(records.len());
+    for (i, r) in records.iter().enumerate() {
+        name_to_idx.insert(r.name.as_normalized().to_string(), i);
+    }
+
+    let sorted = PackageRecord::sort_topologically(records.to_vec());
+
+    let mut order: Vec<usize> = Vec::with_capacity(records.len());
+    let mut seen = vec![false; records.len()];
+    for record in &sorted {
+        if let Some(&idx) = name_to_idx.get(record.name.as_normalized())
+            && !seen[idx]
+        {
+            seen[idx] = true;
+            order.push(idx);
+        }
+    }
+    // Append anything the sort didn't cover so no package vanishes.
+    for (idx, was_seen) in seen.iter().enumerate() {
+        if !was_seen {
+            order.push(idx);
+        }
+    }
+    order
 }
 
 /// Mount a pre-built metadata tree. Returns a handle that unmounts on drop.
 pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Result<MountHandle> {
-    let transport = config.transport.resolve();
+    let transport = config.transport;
 
-    // ProjFS-specific pre-flight checks: DLL availability, mode validity,
-    // overlay state. Done before VFS construction so we don't waste offset
+    // ProjFS-specific pre-flight checks: DLL availability and mode validity.
+    // Done before VFS construction so we don't waste offset
     // computation if ProjFS isn't installed or the user passed Mode::ReadOnly.
     #[cfg(target_os = "windows")]
     if matches!(transport, Transport::ProjFs) {
@@ -820,37 +1175,22 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
             tracing::warn!("ProjFS does not support read-only mode; falling through to writable");
         }
 
-        // Validate overlay state (env hash) to reject stale mounts.
-        {
-            use crate::overlay::{OverlayError, OverlayState};
-            match OverlayState::load(
-                config.mount_point.clone(),
-                config.env_hash.clone(),
-                "projfs".to_string(),
-                config.overlay_mismatch,
-            ) {
-                Ok(_) => {} // hash matches or fresh overlay
-                Err(OverlayError::EnvHashMismatch {
-                    expected, found, ..
-                }) => {
-                    return Err(MountError::OverlayEnvHashMismatch {
-                        expected,
-                        found,
-                        // For ProjFS the overlay is the virtualization root,
-                        // i.e. the mount point itself.
-                        overlay_dir: config.mount_point.clone(),
-                    }
-                    .into());
-                }
-                Err(OverlayError::TransportMismatch {
-                    expected, found, ..
-                }) => {
-                    return Err(MountError::OverlayTransportMismatch { expected, found }.into());
-                }
-                Err(e) => anyhow::bail!("overlay state check failed: {e}"),
-            }
-        }
+        // The overlay state (env hash) is validated only after
+        // virtualization has started (see the `Transport::ProjFs` arm below):
+        // the state file lives inside the virtualization root, and once a
+        // directory has been a root, ProjFS refuses I/O inside it while no
+        // provider is running (ERROR_FILE_SYSTEM_VIRTUALIZATION_UNAVAILABLE,
+        // os error 369). Reading it up front would make every remount of the
+        // same directory fail.
     }
+
+    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
+    tracing::info!(
+        transport = transport.name(),
+        mount_point = %config.mount_point.display(),
+        read_only,
+        "mounting virtual environment"
+    );
 
     // Construct the VirtualFS once. Each transport branch consumes it.
     // VFS construction does eager prefix-offset computation, so we want
@@ -859,17 +1199,74 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
 
     match transport {
         #[cfg(feature = "nfs")]
-        Transport::Nfs => Ok(MountHandle::Nfs(mount_nfs(vfs, config).await?)),
+        Transport::Nfs => Ok(MountHandle::Nfs(nfs_adapter::mount_nfs(vfs, config).await?)),
         #[cfg(any(target_os = "linux", feature = "fuse"))]
-        Transport::Fuse => Ok(MountHandle::Fuse(mount_fuse(vfs, config)?)),
+        Transport::Fuse => Ok(MountHandle::Fuse(fuse_adapter::mount_fuse(vfs, config)?)),
         #[cfg(target_os = "windows")]
         Transport::ProjFs => {
+            std::fs::create_dir_all(&config.mount_point)?;
             let adapter = projfs_adapter::ProjFsAdapter::new(vfs);
             let handle = adapter.start(&config.mount_point)?;
+            if let Err(e) = check_projfs_overlay_state(config) {
+                // Don't leave a provider serving an overlay we just rejected.
+                if let Err(stop_err) = handle.unmount() {
+                    tracing::warn!("failed to stop ProjFS after overlay check: {stop_err}");
+                }
+                return Err(e);
+            }
             Ok(MountHandle::ProjFs(handle))
         }
         #[allow(unreachable_patterns)]
         _ => Err(MountError::TransportNotAvailable { transport })?,
+    }
+}
+
+/// Delete a directory that has been used as a `ProjFS` mount point.
+///
+/// Once a directory has been a `ProjFS` virtualization root it can neither be
+/// read nor deleted while no provider is running on it (os error 369, "The
+/// provider that supports file system virtualization is temporarily
+/// unavailable"), so a plain `remove_dir_all` fails after unmounting. This
+/// starts a provider that projects nothing, deletes the root's contents through
+/// it, stops it again and then removes the root itself.
+///
+/// The mount at `root` must not be live (unmount it first). Directories that
+/// were never a virtualization root are removed normally.
+#[cfg(target_os = "windows")]
+pub fn remove_projfs_root(root: &Path) -> anyhow::Result<()> {
+    projfs_adapter::remove_virtualization_root(root)
+}
+
+/// Validate the `ProjFS` overlay state (env hash, transport) to reject stale
+/// mounts.
+///
+/// For `ProjFS` the overlay is the virtualization root itself, so this must run
+/// while a provider is serving the root: on a root whose provider has stopped,
+/// every access inside it fails with os error 369.
+#[cfg(target_os = "windows")]
+fn check_projfs_overlay_state(config: &MountConfig) -> anyhow::Result<()> {
+    use crate::overlay::{OverlayError, OverlayState};
+    match OverlayState::load(
+        config.mount_point.clone(),
+        config.env_hash.clone(),
+        Transport::ProjFs.name().to_string(),
+        config.overlay_mismatch,
+    ) {
+        Ok(_) => Ok(()), // hash matches or fresh overlay
+        Err(OverlayError::EnvHashMismatch {
+            expected, found, ..
+        }) => Err(MountError::OverlayEnvHashMismatch {
+            expected,
+            found,
+            // For ProjFS the overlay is the virtualization root,
+            // i.e. the mount point itself.
+            overlay_dir: config.mount_point.clone(),
+        }
+        .into()),
+        Err(OverlayError::TransportMismatch {
+            expected, found, ..
+        }) => Err(MountError::OverlayTransportMismatch { expected, found }.into()),
+        Err(e) => anyhow::bail!("overlay state check failed: {e}"),
     }
 }
 
@@ -887,11 +1284,33 @@ pub async fn build_and_mount(
     package_cache: &PackageCache,
     config: &MountConfig,
 ) -> anyhow::Result<MountHandle> {
+    build_and_mount_with_client(
+        lockfile,
+        environment_name,
+        platform,
+        package_cache,
+        default_client(),
+        config,
+    )
+    .await
+}
+
+/// Like [`build_and_mount`], but downloads missing packages with `client`, see
+/// [`MetadataTree::build_with_client`].
+pub async fn build_and_mount_with_client(
+    lockfile: &LockFile,
+    environment_name: &str,
+    platform: Subdir,
+    package_cache: &PackageCache,
+    client: impl Into<LazyClient>,
+    config: &MountConfig,
+) -> anyhow::Result<MountHandle> {
     let metadata = build_metadata_tree(
         lockfile,
         environment_name,
         platform,
         package_cache,
+        client.into(),
         &config.mount_point,
     )
     .await?;
@@ -996,185 +1415,6 @@ pub fn compute_env_hash(
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
-// ---------------------------------------------------------------------------
-// Internal: transport-specific mount helpers
-// ---------------------------------------------------------------------------
-
-/// Mount via FUSE, with optional writable overlay.
-///
-/// The overlay is retried once if the env hash mismatches (environment updated).
-#[cfg(any(target_os = "linux", feature = "fuse"))]
-fn mount_fuse(vfs: VirtualFS, config: &MountConfig) -> anyhow::Result<fuser::BackgroundSession> {
-    use fuse_adapter::FuseAdapter;
-    use fuser::{Config as FuserConfig, MountOption, SessionACL};
-
-    let mut fuser_config = FuserConfig::default();
-    fuser_config.mount_options = vec![
-        MountOption::FSName("conda-packages".to_string()),
-        MountOption::NoAtime,
-    ];
-    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
-        fuser_config.mount_options.push(MountOption::RO);
-    }
-    if config.allow_other {
-        fuser_config.acl = SessionACL::All;
-    }
-
-    match &config.mode {
-        Mode::Writable {
-            overlay_dir: Some(overlay_dir),
-        } => {
-            let overlay = create_overlay(
-                vfs,
-                overlay_dir,
-                &config.env_hash,
-                "fuse",
-                config.overlay_mismatch,
-            )?;
-            let adapter = FuseAdapter::new(overlay);
-            Ok(fuser::spawn_mount2(
-                adapter,
-                &config.mount_point,
-                &fuser_config,
-            )?)
-        }
-        Mode::Writable { overlay_dir: None } => {
-            anyhow::bail!(
-                "FUSE writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
-            );
-        }
-        Mode::ReadOnly | Mode::ReadOnlyIfSupported => {
-            let adapter = FuseAdapter::new(vfs);
-            Ok(fuser::spawn_mount2(
-                adapter,
-                &config.mount_point,
-                &fuser_config,
-            )?)
-        }
-    }
-}
-
-/// Mount via NFS, with optional writable overlay.
-///
-/// The overlay is retried once if the env hash mismatches (environment updated).
-#[cfg(feature = "nfs")]
-async fn mount_nfs(
-    vfs: VirtualFS,
-    config: &MountConfig,
-) -> anyhow::Result<nfs_adapter::NfsMountHandle> {
-    use nfs_adapter::NfsAdapter;
-
-    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
-
-    let bind_port = 0u16;
-
-    let server_handle = match &config.mode {
-        Mode::Writable {
-            overlay_dir: Some(overlay_dir),
-        } => {
-            let overlay = create_overlay(
-                vfs,
-                overlay_dir,
-                &config.env_hash,
-                "nfs",
-                config.overlay_mismatch,
-            )?;
-            NfsAdapter::new(overlay).serve(bind_port).await?
-        }
-        Mode::Writable { overlay_dir: None } => {
-            anyhow::bail!(
-                "NFS writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
-            );
-        }
-        Mode::ReadOnly | Mode::ReadOnlyIfSupported => NfsAdapter::new(vfs).serve(bind_port).await?,
-    };
-
-    let port = server_handle.port();
-
-    // `soft` with a bounded timeout so a dead userspace NFS server (e.g. the
-    // sidecar crashed) surfaces EIO to clients instead of wedging them in
-    // uninterruptible D-state on every access, which a hard mount would. The
-    // server is always local, so the usual soft-mount data-loss caveat is moot:
-    // if it dies, the mount is gone regardless. timeo is in deciseconds.
-    let mut opts = format!(
-        "noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
-    );
-    if read_only {
-        opts.push_str(",actimeo=3600,ro");
-    } else {
-        opts.push_str(",wsize=1048576");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let mnt = config.mount_point.display().to_string();
-        let status = tokio::process::Command::new("mount_nfs")
-            .args(["-o", &opts, "localhost:/", &mnt])
-            .status()
-            .await?;
-        if !status.success() {
-            server_handle.abort();
-            anyhow::bail!("NFS mount failed with exit status {status}");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let mnt = config.mount_point.display().to_string();
-        // Probe passwordless sudo first — `mount -t nfs` needs CAP_SYS_ADMIN
-        // which isn't available in unprivileged user namespaces, so there's no
-        // userspace fallback we can reach for. Fail loudly instead of letting
-        // sudo prompt interactively (terrible UX in `pixi run`).
-        //
-        // TODO(bind-mount): investigate `unshare -Urm` + `mount --bind` as a
-        // rootless alternative transport on Linux. That would work in rootless
-        // containers where neither FUSE nor sudo is available.
-        let probe = tokio::process::Command::new("sudo")
-            .args(["-n", "true"])
-            .status()
-            .await;
-        match probe {
-            Ok(s) if s.success() => {}
-            _ => {
-                server_handle.abort();
-                return Err(MountError::SudoRequired.into());
-            }
-        }
-
-        let status = tokio::process::Command::new("sudo")
-            .args(["mount", "-t", "nfs", "-o", &opts, "localhost:/", &mnt])
-            .status()
-            .await?;
-        if !status.success() {
-            server_handle.abort();
-            anyhow::bail!("NFS mount failed with exit status {status}");
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        server_handle.abort();
-        anyhow::bail!("NFS mount is not supported on this platform. Use ProjFS on Windows.");
-    }
-
-    // Only reachable on the NFS-capable targets; on other platforms the block
-    // above diverges, so gate the success tail to avoid unreachable-code errors.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        tracing::info!("mounted via NFS on {}", config.mount_point.display());
-
-        Ok(nfs_adapter::NfsMountHandle {
-            mount_point: config.mount_point.clone(),
-            server_handle,
-            unmounted: false,
-        })
-    }
-}
-
 /// Create an overlay, wiping and retrying transparently on state-version
 /// mismatch (internal schema change). Returns a structured error on env-hash
 /// mismatch so the caller can decide whether to wipe — the overlay may contain
@@ -1183,7 +1423,7 @@ async fn mount_nfs(
 /// Acquires the directory lock once and carries it through the wipe-and-retry
 /// path so no other process can sneak in between the wipe and the reload.
 #[cfg(any(feature = "nfs", target_os = "linux", feature = "fuse"))]
-fn create_overlay(
+pub(crate) fn create_overlay(
     vfs: VirtualFS,
     overlay_dir: &Path,
     env_hash: &str,
@@ -1255,7 +1495,7 @@ fn create_overlay(
 /// | macOS | FUSE / NFS | `umount -f` |
 /// | Windows | `ProjFS` | Not yet supported — returns an error |
 ///
-/// Pass [`Transport::Auto`] to use the platform default.
+/// Pass [`Transport::best`]`()` to use the platform default.
 ///
 /// **NFS on Linux note:** `umount -f` requires `CAP_SYS_ADMIN`.  If
 /// passwordless sudo is not available, this will fail.  Consider switching
@@ -1267,7 +1507,6 @@ fn create_overlay(
 /// A future version may support re-attaching to an existing virtualization
 /// root.
 pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result<()> {
-    let transport = transport.resolve();
     let mnt = mount_point.display().to_string();
 
     match transport {
@@ -1275,6 +1514,37 @@ pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result
         Transport::Fuse => {
             #[cfg(target_os = "linux")]
             {
+                // A privileged process (which is also when fuser mounts with
+                // mount(2) directly, without fusermount3) can detach the mount
+                // itself; that also works where fusermount3 isn't installed.
+                // Only for FUSE mounts, like fusermount3: `statfs` reports the
+                // filesystem type, and fails with ENOTCONN for a FUSE mount
+                // whose server died. Never follow a symlink at the mount point.
+                if let Ok(c_path) =
+                    std::ffi::CString::new(mount_point.as_os_str().as_encoded_bytes())
+                {
+                    const FUSE_SUPER_MAGIC: i64 = 0x6573_5546;
+                    // SAFETY: `c_path` is a valid NUL-terminated path and
+                    // `statfs` only writes to the struct we pass.
+                    let is_fuse = unsafe {
+                        let mut stat: libc::statfs = std::mem::zeroed();
+                        if libc::statfs(c_path.as_ptr(), &mut stat) == 0 {
+                            #[allow(clippy::unnecessary_cast)]
+                            let fs_type = stat.f_type as i64;
+                            fs_type == FUSE_SUPER_MAGIC
+                        } else {
+                            std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOTCONN)
+                        }
+                    };
+                    // SAFETY: as above.
+                    if is_fuse
+                        && unsafe {
+                            libc::umount2(c_path.as_ptr(), libc::MNT_DETACH | libc::UMOUNT_NOFOLLOW)
+                        } == 0
+                    {
+                        return Ok(());
+                    }
+                }
                 let status = std::process::Command::new("fusermount3")
                     .args(["-uz", &mnt])
                     .status()?;
@@ -1319,10 +1589,9 @@ pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result
         #[cfg(target_os = "windows")]
         Transport::ProjFs => {
             anyhow::bail!(
-                "ProjFS stale-mount recovery is not yet supported. \
-                 The virtualization context died with the owning process; \
-                 hydrated files remain at {mnt}. Remove the directory \
-                 manually and remount, or wait for re-attach support."
+                "ProjFS has no stale mount to detach: the virtualization \
+                 instance stopped with the owning process and {mnt} can simply \
+                 be mounted again. To delete it, use `remove_projfs_root`."
             );
         }
         _ => {
@@ -1341,6 +1610,116 @@ mod tests {
     use super::*;
     use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
     use std::path::PathBuf;
+
+    /// A tree built from a package's index matches one built from its
+    /// `paths.json`: same layout, attributes and (prefix-replaced) contents.
+    #[test]
+    fn index_parse_matches_path_parse() {
+        use crate::vfs_ops::VfsOps;
+        use rattler_conda_types::package::{FileMode, PrefixPlaceholder};
+
+        let dir = tempfile::tempdir().unwrap();
+        let pkg = dir.path();
+        std::fs::create_dir_all(pkg.join("info")).unwrap();
+        std::fs::create_dir_all(pkg.join("bin")).unwrap();
+        std::fs::create_dir_all(pkg.join("lib/python3.12/__pycache__")).unwrap();
+        std::fs::write(
+            pkg.join("bin/tool"),
+            b"#!/old/prefix/bin/python\nprint('/old/prefix')\n",
+        )
+        .unwrap();
+        std::fs::write(pkg.join("lib/libx.so"), b"\x7fELF\0/old/prefix/lib\0tail").unwrap();
+        std::fs::write(pkg.join("lib/python3.12/m.py"), b"x = 1\n").unwrap();
+        std::fs::write(
+            pkg.join("lib/python3.12/__pycache__/m.cpython-312.pyc"),
+            b"pyc",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("libx.so", pkg.join("lib/libx.so.1")).unwrap();
+        let entry = |path: &str, path_type, mode: Option<FileMode>| PathsEntry {
+            relative_path: PathBuf::from(path),
+            path_type,
+            prefix_placeholder: mode.map(|file_mode| PrefixPlaceholder {
+                file_mode,
+                placeholder: "/old/prefix".to_string(),
+                experimental_offsets: None,
+            }),
+            no_link: false,
+            sha256: None,
+            size_in_bytes: None,
+        };
+        let mut paths = vec![
+            entry("bin/tool", PathType::HardLink, Some(FileMode::Text)),
+            entry("lib/libx.so", PathType::HardLink, Some(FileMode::Binary)),
+            entry("lib/python3.12/m.py", PathType::HardLink, None),
+            entry(
+                "lib/python3.12/__pycache__/m.cpython-312.pyc",
+                PathType::HardLink,
+                None,
+            ),
+        ];
+        if cfg!(unix) {
+            paths.push(entry("lib/libx.so.1", PathType::SoftLink, None));
+        }
+        let paths_json = PathsJson {
+            paths,
+            paths_version: 1,
+        };
+        std::fs::write(
+            pkg.join("info/paths.json"),
+            serde_json::to_vec(&paths_json).unwrap(),
+        )
+        .unwrap();
+
+        let platform = Subdir::current().unwrap();
+        let mount_point = Path::new("/new/prefix");
+        let from_json = {
+            let (mut nodes, mut dirs, mut files) = new_empty_tree();
+            path_parse(&paths_json, pkg, None, &mut nodes, &mut dirs, &mut files);
+            VirtualFS::with_platform(nodes, mount_point, platform)
+        };
+        let from_index = {
+            let index = package_index::load_or_build(pkg, platform).unwrap();
+            let (mut nodes, mut dirs, mut files) = new_empty_tree();
+            index_parse(&index, pkg, None, &mut nodes, &mut dirs, &mut files);
+            VirtualFS::with_platform(nodes, mount_point, platform)
+        };
+
+        let walk = |vfs: &VirtualFS| {
+            let mut out = Vec::new();
+            let mut stack = vec![(1u64, PathBuf::new())];
+            while let Some((ino, path)) = stack.pop() {
+                for entry in vfs.readdir(ino, 0).unwrap() {
+                    if entry.name == "." || entry.name == ".." {
+                        continue;
+                    }
+                    let child = path.join(&entry.name);
+                    let attr = vfs.lookup(ino, &entry.name).unwrap();
+                    let content = match attr.kind {
+                        crate::vfs_ops::FileKind::Directory => {
+                            stack.push((attr.ino, child.clone()));
+                            Vec::new()
+                        }
+                        crate::vfs_ops::FileKind::Symlink => vfs
+                            .readlink(attr.ino)
+                            .unwrap()
+                            .into_os_string()
+                            .into_encoded_bytes(),
+                        crate::vfs_ops::FileKind::RegularFile => {
+                            vfs.read(attr.ino, 0, 1 << 20).unwrap()
+                        }
+                    };
+                    out.push((child, attr.kind, attr.size, attr.mtime, attr.perm, content));
+                }
+            }
+            out.sort_by(|a, b| a.0.cmp(&b.0));
+            out
+        };
+        let expected = walk(&from_json);
+        assert_eq!(expected.len(), if cfg!(unix) { 9 } else { 8 });
+        assert_eq!(walk(&from_index), expected);
+    }
 
     fn make_paths_json(paths: Vec<&str>) -> PathsJson {
         PathsJson {
@@ -1362,13 +1741,14 @@ mod tests {
     #[test]
     fn test_single_file_at_root() {
         let paths_json = make_paths_json(vec!["foo.txt"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert_eq!(env_paths.len(), 2); // root + foo.txt
@@ -1382,13 +1762,14 @@ mod tests {
     #[test]
     fn test_nested_directories() {
         let paths_json = make_paths_json(vec!["a/b/c.txt"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root, dir "a", dir "a/b", file "c.txt"
@@ -1412,13 +1793,14 @@ mod tests {
     #[test]
     fn test_directory_dedup() {
         let paths_json = make_paths_json(vec!["lib/foo", "lib/bar"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root, dir "lib", file "foo", file "bar"
@@ -1436,13 +1818,14 @@ mod tests {
         let pkg1 = make_paths_json(vec!["lib/foo.so"]);
         let pkg2 = make_paths_json(vec!["lib/bar.so"]);
 
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &pkg1,
             Path::new("/cache/pkg1"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
         path_parse(
             &pkg2,
@@ -1450,6 +1833,7 @@ mod tests {
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root, dir "lib", file "foo.so", file "bar.so"
@@ -1468,13 +1852,14 @@ mod tests {
     #[test]
     fn test_empty_paths_json() {
         let paths_json = make_paths_json(vec![]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert_eq!(env_paths.len(), 1); // root only
@@ -1503,14 +1888,16 @@ mod tests {
 
     #[test]
     fn test_entry_points_creates_bin_dir() {
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         let python_info = make_python_info();
         add_entry_points(
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Subdir::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root + bin dir + 2 files
@@ -1521,14 +1908,16 @@ mod tests {
 
     #[test]
     fn test_entry_points_adds_files() {
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         let python_info = make_python_info();
         add_entry_points(
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Subdir::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let bin_idx = dir_indices[&PathBuf::from("./bin")];
@@ -1546,14 +1935,16 @@ mod tests {
 
     #[test]
     fn test_entry_points_virtual_content() {
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         let python_info = make_python_info();
         add_entry_points(
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Subdir::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let bin_idx = dir_indices[&PathBuf::from("./bin")];
@@ -1583,13 +1974,14 @@ mod tests {
     fn test_entry_points_dedup_bin_dir() {
         // Create a tree that already has bin/ from another package
         let pkg = make_paths_json(vec!["bin/existing"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &pkg,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let bin_idx = dir_indices[&PathBuf::from("./bin")];
@@ -1601,8 +1993,10 @@ mod tests {
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Subdir::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // bin dir should now have 3 children (existing + ipython + ipython3), not a new bin dir
@@ -1623,13 +2017,14 @@ mod tests {
             "site-packages/foo/bar.py",
         ]);
         let python_info = make_python_info(); // python 3.11
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Should have: lib/python3.11/site-packages/foo/ directory structure
@@ -1645,13 +2040,14 @@ mod tests {
     fn test_noarch_python_rewrites_python_scripts() {
         let paths_json = make_paths_json(vec!["python-scripts/mycmd"]);
         let python_info = make_python_info();
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Should appear under bin/
@@ -1667,13 +2063,14 @@ mod tests {
     fn test_noarch_python_preserves_cache_path() {
         let paths_json = make_paths_json(vec!["site-packages/foo/bar.py"]);
         let python_info = make_python_info();
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/noarch-pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Find bar.py
@@ -1695,13 +2092,14 @@ mod tests {
         // Files not under site-packages/ or python-scripts/ should be unchanged
         let paths_json = make_paths_json(vec!["share/data/file.txt"]);
         let python_info = make_python_info();
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert!(dir_indices.contains_key(&PathBuf::from("./share")));
@@ -1719,13 +2117,14 @@ mod tests {
     fn test_non_noarch_no_rewrite() {
         // Without python_info, site-packages/ stays as-is
         let paths_json = make_paths_json(vec!["site-packages/foo/bar.py"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert!(dir_indices.contains_key(&PathBuf::from("./site-packages")));
@@ -1783,5 +2182,240 @@ packages:
              update this golden value. If accidental, investigate what changed in the \
              canonical form."
         );
+    }
+
+    // --- clobbering (#2580, sub-bug 1) ---
+
+    #[test]
+    fn test_clobber_single_entry_last_writer_wins() {
+        // A path shipped by two packages yields one readdir entry, served from
+        // whichever package is processed last (the deterministic installer
+        // winner, since the caller feeds packages in topological order).
+        let build = |order: [(&str, &Path); 2]| -> PathBuf {
+            let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
+            for (rel, cache) in order {
+                path_parse(
+                    &make_paths_json(vec![rel]),
+                    cache,
+                    None,
+                    &mut env_paths,
+                    &mut dir_indices,
+                    &mut file_indices,
+                );
+            }
+            let bin_idx = dir_indices[&PathBuf::from("./bin")];
+            let bin = env_paths[bin_idx].as_directory().unwrap();
+            assert_eq!(bin.children.len(), 1);
+            env_paths[bin.children[0]]
+                .as_file()
+                .unwrap()
+                .cache_base_path
+                .to_path_buf()
+        };
+
+        assert_eq!(
+            build([("bin/tool", Path::new("/a")), ("bin/tool", Path::new("/b"))]),
+            PathBuf::from("/b"),
+        );
+        assert_eq!(
+            build([("bin/tool", Path::new("/b")), ("bin/tool", Path::new("/a"))]),
+            PathBuf::from("/a"),
+        );
+    }
+
+    fn record_with_depends(name: &str, depends: &[&str]) -> PackageRecord {
+        use rattler_conda_types::{PackageName, VersionWithSource};
+        use std::str::FromStr;
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked(name),
+            VersionWithSource::from_str("1.0").unwrap(),
+            "0".parse().unwrap(),
+        );
+        record.depends = depends.iter().map(|d| (*d).to_string()).collect();
+        record
+    }
+
+    #[test]
+    fn test_topological_order_deterministic_dependency_before_dependent() {
+        // `a` depends on `b`; `c` is independent. The result must (1) place a
+        // dependency before its dependent (last = clobber winner) and (2) be
+        // identical however the input is arranged, so clobbering is stable.
+        let mk = |names: [&str; 3]| {
+            let recs = vec![
+                record_with_depends(names[0], if names[0] == "a" { &["b"] } else { &[] }),
+                record_with_depends(names[1], if names[1] == "a" { &["b"] } else { &[] }),
+                record_with_depends(names[2], if names[2] == "a" { &["b"] } else { &[] }),
+            ];
+            topological_order_of_records(&recs)
+                .into_iter()
+                .map(|i| recs[i].name.as_normalized().to_string())
+                .collect::<Vec<_>>()
+        };
+        let order = mk(["a", "b", "c"]);
+        let pos = |n: &str| order.iter().position(|x| x == n).unwrap();
+        assert!(
+            pos("b") < pos("a"),
+            "dependency before dependent: {order:?}"
+        );
+        assert_eq!(order, mk(["c", "b", "a"]));
+        assert_eq!(order, mk(["b", "a", "c"]));
+    }
+
+    // --- pypi loud warning (#2580, sub-bug 2) ---
+
+    #[test]
+    fn test_format_dropped_pypi_warning_lists_packages() {
+        let msg = format_dropped_pypi_warning(&["requests 2.31.0".into(), "flask 3.0.0".into()]);
+        assert!(msg.contains("2 pypi package(s)"), "count missing: {msg}");
+        assert!(msg.contains("requests 2.31.0"), "pkg missing: {msg}");
+        assert!(msg.contains("flask 3.0.0"), "pkg missing: {msg}");
+        assert!(
+            msg.contains("incomplete"),
+            "should flag incompleteness: {msg}"
+        );
+    }
+
+    // --- entry point layout on Windows (#2580, sub-bug 3) ---
+    // The Unix path (single shebang script under bin/) is covered by the
+    // `test_entry_points_*` tests above; here we check the Windows divergence.
+
+    #[test]
+    fn test_windows_entry_points_script_exe_under_scripts_dir() {
+        use rattler_conda_types::Version;
+        use std::str::FromStr;
+        // A Windows target gives bin_dir == Scripts.
+        let python_info =
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), None, Subdir::Win64)
+                .unwrap();
+        assert_eq!(python_info.bin_dir, PathBuf::from("Scripts"));
+
+        // Each entry point becomes a `<cmd>-script.py` (no shebang) plus a
+        // `<cmd>.exe` carrying the vendored conda launcher bytes.
+        let eps = make_entry_points();
+        let arts = entry_point_artifacts("C:/prefix", &eps[0], &python_info, Subdir::Win64);
+        let by_name = |suffix: &str| {
+            arts.iter()
+                .find(|a| a.file_name.to_string_lossy().ends_with(suffix))
+                .unwrap_or_else(|| panic!("missing {suffix}"))
+        };
+        assert_eq!(arts.len(), 2);
+        assert_eq!(
+            by_name(".exe").content,
+            rattler::install::get_windows_launcher(&Subdir::Win64),
+        );
+        assert!(!by_name("-script.py").content.starts_with(b"#!"));
+
+        // Integration: they land under ./Scripts, not ./bin.
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
+        add_entry_points(
+            &make_entry_points(),
+            "C:/prefix",
+            &python_info,
+            Subdir::Win64,
+            &mut env_paths,
+            &mut dir_indices,
+            &mut file_indices,
+        );
+        assert!(dir_indices.contains_key(&PathBuf::from("./Scripts")));
+        assert!(!dir_indices.contains_key(&PathBuf::from("./bin")));
+        let scripts = env_paths[dir_indices[&PathBuf::from("./Scripts")]]
+            .as_directory()
+            .unwrap();
+        assert_eq!(scripts.children.len(), 4); // 2 entry points x (script + exe)
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod projfs_tests {
+    use super::*;
+
+    /// A tiny tree: `top.txt` and `pkg/hello.txt`.
+    fn tree() -> MetadataTree {
+        let (mut nodes, mut dirs, mut files) = new_empty_tree();
+        let top = MetadataNode::new_virtual_file("top.txt".into(), 0, b"top".to_vec());
+        upsert_file_node(top, 0, (0, "top.txt".into()), &mut nodes, &mut files);
+        let pkg = ensure_directory(Path::new(".").join("pkg"), 0, &mut nodes, &mut dirs);
+        let hello = MetadataNode::new_virtual_file("hello.txt".into(), pkg, b"hello".to_vec());
+        upsert_file_node(
+            hello,
+            pkg,
+            (pkg, "hello.txt".into()),
+            &mut nodes,
+            &mut files,
+        );
+        MetadataTree(nodes)
+    }
+
+    fn config(root: &Path, env_hash: &str) -> MountConfig {
+        MountConfig::new(root.to_path_buf(), Transport::ProjFs, env_hash.to_string())
+            .with_mode(Mode::Writable { overlay_dir: None })
+    }
+
+    /// Regression test: a directory that was a `ProjFS` root used to be
+    /// unmountable a second time, because the overlay state inside it was
+    /// read before a provider was running (os error 369).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remount_same_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("env");
+        std::fs::create_dir_all(&root).unwrap();
+        // Like `rattler exec --dematerialized`, keep a file of our own in the
+        // root from before the first mount.
+        std::fs::write(root.join(".exec-lock.yml"), "lock").unwrap();
+
+        let handle = mount(tree(), &config(&root, "env-a")).await.unwrap();
+        assert_eq!(std::fs::read(root.join("pkg/hello.txt")).unwrap(), b"hello");
+        std::fs::create_dir_all(root.join("pkg/__pycache__")).unwrap();
+        std::fs::write(root.join("pkg/__pycache__/hello.pyc"), "pyc").unwrap();
+        handle.unmount().await.unwrap();
+
+        // Without a provider, ProjFS still serves files that are fully on
+        // disk, but refuses anything it would have to ask the provider about,
+        // such as creating a file (which the overlay state code does).
+        assert_eq!(std::fs::read(root.join("pkg/hello.txt")).unwrap(), b"hello");
+        let err = std::fs::write(root.join("new.txt"), "x").unwrap_err();
+        assert!(
+            projfs_adapter::is_provider_unavailable(&err),
+            "unexpected error on stopped root: {err}"
+        );
+
+        for _ in 0..2 {
+            let handle = mount(tree(), &config(&root, "env-a")).await.unwrap();
+            assert_eq!(std::fs::read(root.join("top.txt")).unwrap(), b"top");
+            assert_eq!(std::fs::read(root.join("pkg/hello.txt")).unwrap(), b"hello");
+            assert_eq!(
+                std::fs::read(root.join("pkg/__pycache__/hello.pyc")).unwrap(),
+                b"pyc"
+            );
+            assert_eq!(std::fs::read(root.join(".exec-lock.yml")).unwrap(), b"lock");
+            handle.unmount().await.unwrap();
+        }
+
+        // A different environment is still rejected, and the provider started
+        // for the check is stopped again so the root stays usable.
+        let err = mount(tree(), &config(&root, "env-b")).await.err().unwrap();
+        assert!(
+            matches!(
+                err.downcast_ref::<MountError>(),
+                Some(MountError::OverlayEnvHashMismatch { .. })
+            ),
+            "expected an env hash mismatch, got: {err:#}"
+        );
+        let handle = mount(tree(), &config(&root, "env-a")).await.unwrap();
+        handle.unmount().await.unwrap();
+
+        remove_projfs_root(&root).unwrap();
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn remove_projfs_root_handles_plain_and_missing_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plain = tmp.path().join("plain");
+        std::fs::create_dir_all(plain.join("sub")).unwrap();
+        std::fs::write(plain.join("sub/file"), "x").unwrap();
+        remove_projfs_root(&plain).unwrap();
+        assert!(!plain.exists());
+        remove_projfs_root(&tmp.path().join("missing")).unwrap();
     }
 }

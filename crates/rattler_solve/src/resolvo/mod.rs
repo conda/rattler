@@ -26,6 +26,7 @@ use resolvo::{
     utils::{Pool, VersionSet},
 };
 use url::Url;
+use version_index::VersionIndex;
 
 use crate::{
     CancellationToken, ChannelPriority, ExcludeNewer, IntoRepoData, SolveError, SolveStrategy,
@@ -34,6 +35,7 @@ use crate::{
 };
 
 mod conda_sorting;
+mod version_index;
 
 type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
 
@@ -316,6 +318,10 @@ pub struct CondaDependencyProvider<'a> {
     /// Holds all the cached candidates for each package name.
     records: HashMap<NameId, Candidates>,
 
+    /// Caches the records of each package grouped by version, so a version spec
+    /// is tested once per version.
+    version_index: RefCell<VersionIndex<'a>>,
+
     /// Caches the dependency-based ordering of equivalent package variants.
     dependency_tiebreak_cache: RefCell<DependencyTiebreakCache>,
 
@@ -348,8 +354,17 @@ pub struct CondaDependencyProvider<'a> {
     /// multichannel share a single rank.
     ///
     /// This is only populated (and consulted) for
-    /// [`ChannelPriority::Flexible`].
+    /// [`ChannelPriority::Flexible`] and [`ChannelPriority::VersionFirst`].
     channel_order: HashMap<Option<String>, u32>,
+
+    /// The channel-priority rank of each solvable interned from the additional
+    /// records. Under [`ChannelPriority::Flexible`] and
+    /// [`ChannelPriority::VersionFirst`] an additional record ranks with the
+    /// highest-priority tier that contains its package name, like the
+    /// per-package tier the libsolv backend places its additional repos in.
+    /// Tracking ids rather than channel names leaves repodata records from the
+    /// same channel at their own rank.
+    additional_ranks: HashMap<SolvableId, u32>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -359,6 +374,7 @@ impl<'a> CondaDependencyProvider<'a> {
         repodata: impl IntoIterator<Item = RepoData<'a>>,
         favored_records: &[&'a RepoDataRecord],
         locked_records: &[&'a RepoDataRecord],
+        additional_records: &[&'a RepoDataRecord],
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
@@ -421,9 +437,16 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Maps each channel to the priority rank of its tier in the order tiers are
         // first encountered (which matches the order channels were provided). Lower
-        // rank == higher priority. Used by `ChannelPriority::Flexible`.
+        // rank == higher priority. Used by `ChannelPriority::Flexible` and
+        // `ChannelPriority::VersionFirst`.
         let mut channel_order = HashMap::<Option<String>, u32>::new();
         let mut tier_order = HashMap::<PriorityTier<'a>, u32>::new();
+
+        // Maps each package name to the rank of the highest-priority tier that
+        // contains it. Only maintained for [`ChannelPriority::Flexible`] and
+        // [`ChannelPriority::VersionFirst`], so additional records can rank
+        // with the tier containing their package.
+        let mut package_rank = HashMap::<&str, u32>::new();
 
         // A channel-specific spec that names one of these multichannels accepts
         // records from every channel of that multichannel.
@@ -498,6 +521,16 @@ impl<'a> CondaDependencyProvider<'a> {
                                     // (.conda > .whl > .tar.bz2)
                                 }
                                 Ordering::Equal => {
+                                    // Compare the complete record, including its source and
+                                    // checksums, rather than just its package identity.
+                                    if ordered_repodata[*idx] == record {
+                                        tracing::warn!(
+                                            identifier = %record.identifier,
+                                            url = %record.url,
+                                            "ignoring identical duplicate package record; keeping the first record"
+                                        );
+                                        continue;
+                                    }
                                     return Err(SolveError::DuplicateRecords(
                                         record.identifier.to_string(),
                                     ));
@@ -520,13 +553,20 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 let tier = PriorityTier::new(multi_channel, record.channel.as_deref());
 
-                // Only [`ChannelPriority::Flexible`] consults channel ranks.
-                if channel_priority == ChannelPriority::Flexible
-                    && !channel_order.contains_key(&record.channel)
-                {
+                // Flexible and version-first channel priority both consult
+                // channel ranks: flexible sorts on them before the version,
+                // version-first uses them only to break version ties.
+                if matches!(
+                    channel_priority,
+                    ChannelPriority::Flexible | ChannelPriority::VersionFirst
+                ) {
                     let next_rank = tier_order.len() as u32;
                     let rank = *tier_order.entry(tier).or_insert(next_rank);
-                    channel_order.insert(record.channel.clone(), rank);
+                    channel_order.entry(record.channel.clone()).or_insert(rank);
+                    package_rank
+                        .entry(record.package_record.name.as_normalized())
+                        .and_modify(|existing| *existing = (*existing).min(rank))
+                        .or_insert(rank);
                 }
 
                 // Exclusions the caller derived from outside the repodata, for
@@ -619,6 +659,28 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
 
+        // Add additional packages to the records. These are plain candidates:
+        // they are neither favored nor locked, so the solver weighs them like
+        // any record from the repodata. These records may represent packages
+        // that are not in repodata for the current solve. But are already
+        // installed in the prefix.
+        let mut additional_ranks = HashMap::with_capacity(additional_records.len());
+        for &additional_record in additional_records {
+            let name =
+                pool.intern_package_name(NameType::from(&additional_record.package_record.name));
+            let solvable =
+                pool.intern_solvable(name, SolverPackageRecord::Record(additional_record));
+            // No channel contains the package, so it ranks with the top tier.
+            let rank = package_rank
+                .get(additional_record.package_record.name.as_normalized())
+                .copied()
+                .unwrap_or(0);
+            additional_ranks.insert(solvable, rank);
+            let candidates = records.entry(name).or_default();
+            candidates.candidates.push(solvable);
+            exclude_if_requested(candidates, solvable, additional_record);
+        }
+
         // Add favored packages to the records.
         //
         // An excluded record must not become the favored one: favoring means
@@ -677,6 +739,7 @@ impl<'a> CondaDependencyProvider<'a> {
             pool,
             name_to_condition: RefCell::default(),
             records,
+            version_index: RefCell::default(),
             dependency_tiebreak_cache: RefCell::default(),
             version_ranks: RefCell::default(),
             matchspec_to_highest_version: RefCell::default(),
@@ -688,6 +751,7 @@ impl<'a> CondaDependencyProvider<'a> {
             dependency_overrides: override_map,
             channel_priority,
             channel_order,
+            additional_ranks,
         })
     }
 
@@ -1052,43 +1116,14 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
     ) -> Vec<SolvableId> {
         let spec = self.pool.resolve_version_set(version_set);
         match spec {
-            SolverMatchSpec::MatchSpec(spec) => {
-                candidates
-                    .iter()
-                    .copied()
-                    .filter(|c| {
-                        let record = &self.pool.resolve_solvable(*c).record;
-                        match record {
-                            SolverPackageRecord::Record(rec) => {
-                                // Base package matches if spec matches and no features are required
-                                spec.matches(*rec) != inverse
-                            }
-                            SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
-                                version,
-                                build_string,
-                                ..
-                            }) => {
-                                if let Some(spec) = spec.version.as_ref()
-                                    && !spec.matches(version)
-                                {
-                                    return inverse;
-                                }
-
-                                if let Some(build_match) = spec.build.as_ref()
-                                    && !build_match.matches(build_string.as_str())
-                                {
-                                    return inverse;
-                                }
-
-                                !inverse
-                            }
-                            SolverPackageRecord::Extra { .. } => {
-                                unreachable!("extras should never be compared to matchspecs")
-                            }
-                        }
-                    })
-                    .collect()
-            }
+            SolverMatchSpec::MatchSpec(spec) => self.version_index.borrow_mut().filter(
+                &self.pool,
+                &self.records,
+                self.pool.resolve_version_set_package_name(version_set),
+                candidates,
+                spec,
+                inverse,
+            ),
             SolverMatchSpec::Extra => {
                 // Extras are already filtered by name.
                 if inverse {
@@ -1150,6 +1185,7 @@ impl super::SolverImpl for Solver {
             task.available_packages.into_iter().map(|r| r.into()),
             &task.locked_packages,
             &task.pinned_packages,
+            &task.additional_packages,
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,

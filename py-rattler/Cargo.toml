@@ -29,7 +29,7 @@ pty = ["rattler_pty", "nix"]
 anyhow = "1"
 jiff = { version = "0.2" }
 futures = "0.3"
-parking_lot = { version = "0.12", features = ["arc_lock", "send_guard"] }
+parking_lot = { version = "0.13", features = ["arc_lock", "send_guard"] }
 
 rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"] }
 rattler = { path = "../crates/rattler", default-features = false, features = [
@@ -96,7 +96,7 @@ pyo3-file = "0.17"
 nix = { version = "0.31", features = ["process"], optional = true }
 
 [build-dependencies]
-pyo3-build-config = "0.29"
+pyo3-build-config = "0.30"
 
 
 [patch.crates-io]

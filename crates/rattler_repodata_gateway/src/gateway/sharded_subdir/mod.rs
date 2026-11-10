@@ -5,15 +5,16 @@ use std::sync::Arc;
 use cfg_if::cfg_if;
 use http::StatusCode;
 use rattler_conda_types::{
-    ChannelUrl, PackageRecord, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
+    ChannelUrl, PackageName, PackageRecord, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
     package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
 };
+use rattler_digest::{HashingReader, Sha256, Sha256Hash};
 use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{
-    GatewayError, fetch::FetchRepoDataError, gateway::subdir::FetchedPackage,
-    sparse::RemovedPackage,
+    GatewayError, ShardHashMismatchError, fetch::FetchRepoDataError,
+    gateway::subdir::FetchedPackage, sparse::RemovedPackage,
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -48,37 +49,43 @@ fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
     }
 }
 
+/// Decompresses the `len` zstd bytes `reader` yields, downloaded from `url`.
+fn decode_zst_reader(
+    reader: impl io::Read,
+    len: usize,
+    url: &Url,
+) -> Result<Vec<u8>, GatewayError> {
+    // Check for empty response which indicates a misconfigured server
+    if len == 0 {
+        return Err(GatewayError::IoError(
+            format!(
+                "failed to decode zstd shard from '{}': received empty response (0 bytes). \
+                This usually indicates a misconfigured server.",
+                url.clone().redact()
+            ),
+            io::Error::new(io::ErrorKind::UnexpectedEof, "empty response"),
+        ));
+    }
+
+    zstd::decode_all(reader).map_err(|err| {
+        GatewayError::IoError(
+            format!(
+                "failed to decode zstd shard from '{}' ({len} bytes received). \
+                The server may have returned invalid or truncated data.",
+                url.clone().redact(),
+            ),
+            err,
+        )
+    })
+}
+
 async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     url: Url,
 ) -> Result<Vec<u8>, GatewayError> {
     let decode = move || {
-        let bytes_ref = bytes.as_ref();
-
-        // Check for empty response which indicates a misconfigured server
-        if bytes_ref.is_empty() {
-            return Err(GatewayError::IoError(
-                format!(
-                    "failed to decode zstd shard from '{}': received empty response (0 bytes). \
-                    This usually indicates a misconfigured server.",
-                    url.redact()
-                ),
-                std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "empty response"),
-            ));
-        }
-
-        match zstd::decode_all(bytes_ref) {
-            Ok(decoded) => Ok(decoded),
-            Err(err) => Err(GatewayError::IoError(
-                format!(
-                    "failed to decode zstd shard from '{}' ({} bytes received). \
-                    The server may have returned invalid or truncated data.",
-                    url.redact(),
-                    bytes_ref.len()
-                ),
-                err,
-            )),
-        }
+        let bytes = bytes.as_ref();
+        decode_zst_reader(bytes, bytes.len(), &url)
     };
 
     #[cfg(target_arch = "wasm32")]
@@ -88,11 +95,62 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     simple_spawn_blocking::tokio::run_blocking_task(decode).await
 }
 
-/// Parses the records of a shard. Removed packages are dropped, and a file
-/// that is listed both in a legacy map and in `v3` is described by its `v3`
-/// entry. The records of every bucket are returned.
+/// Decompresses a shard downloaded from `url` and checks that its compressed
+/// bytes hash to `expected_sha256`, the hash the shard index lists for it. The
+/// hash is computed while decoding.
+///
+/// Shards are cached by that hash in a cache shared by all channels, so a
+/// shard whose bytes do not match is rejected, whether or not it decodes,
+/// before it can be parsed or cached.
+async fn decode_verified_shard_async<R: AsRef<[u8]> + Send + 'static>(
+    bytes: R,
+    expected_sha256: Sha256Hash,
+    url: Url,
+) -> Result<Vec<u8>, GatewayError> {
+    let decode = move || {
+        let bytes = bytes.as_ref();
+        let mut reader = HashingReader::<_, Sha256>::new(bytes);
+        let decoded = decode_zst_reader(&mut reader, bytes.len(), &url);
+
+        // The decoder may stop before the end of the input, after a failure or
+        // a final frame; the hash covers every byte.
+        io::copy(&mut reader, &mut io::sink()).map_err(|err| {
+            GatewayError::IoError(
+                format!("failed to hash shard from '{}'", url.clone().redact()),
+                err,
+            )
+        })?;
+        let (_, actual_sha256) = reader.finalize();
+        if actual_sha256 != expected_sha256 {
+            return Err(Box::new(ShardHashMismatchError {
+                url: url.redact(),
+                expected: expected_sha256,
+                actual: actual_sha256,
+            })
+            .into());
+        }
+
+        decoded
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    return decode();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    simple_spawn_blocking::tokio::run_blocking_task(decode).await
+}
+
+/// Parses the records of `package_name` from a shard. Removed packages are
+/// dropped, and a file that is listed both in a legacy map and in `v3` is
+/// described by its `v3` entry. The records of every bucket are returned.
+///
+/// A shard may list other packages than the one it is looked up by: the
+/// `conda-pypi` shard for `tzdata` holds `python-tzdata` records. Only the
+/// records of the requested package are returned, like a `repodata.json`
+/// lookup does, so such records cannot duplicate those of their own shard.
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
+    package_name: PackageName,
     channel_base_url: ChannelUrl,
     base_url: Url,
 ) -> Result<FetchedPackage, GatewayError> {
@@ -198,9 +256,24 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
             }));
         }
 
+        let requested = package_name.as_normalized();
+        let foreign_records = records
+            .iter()
+            .filter(|record| record.package_record.name.as_normalized() != requested)
+            .count();
+        if foreign_records > 0 {
+            tracing::debug!(
+                package_name = requested,
+                foreign_records,
+                "ignoring records of other packages in the shard"
+            );
+        }
+        records.retain(|record| record.package_record.name.as_normalized() == requested);
+
         // Sort the removed set so the result does not depend on hash order.
         let mut removed = removed
             .into_iter()
+            .filter(|identifier| identifier.identifier.name.eq_ignore_ascii_case(requested))
             .map(|identifier| {
                 Ok(RemovedPackage {
                     url: package_url(&identifier.to_file_name())?,
@@ -239,10 +312,10 @@ mod tests {
     use itertools::Itertools;
     use rattler_conda_types::{
         Channel, PackageName, PackageRecord, RepodataRevisions, Shard, ShardedRepodata,
-        ShardedSubdirInfo, Version,
+        ShardedSubdirInfo, UrlOrPath, Version, WhlPackageRecord,
         package::{BuildString, DistArchiveIdentifier},
     };
-    use rattler_digest::{Sha256, parse_digest_from_hex};
+    use rattler_digest::{Sha256, Sha256Hash, compute_bytes_digest};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use std::path::{Path, PathBuf};
@@ -286,12 +359,7 @@ mod tests {
         ) -> Self {
             // Create a minimal sharded index with one package
             let mut shards = ahash::HashMap::default();
-            // Use a known hash for the "test-package" shard (SHA256 of empty string)
-            let shard_hash = parse_digest_from_hex::<Sha256>(
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            )
-            .unwrap();
-            shards.insert("test-package".to_string(), shard_hash);
+            shards.insert("test-package".to_string(), shard_response.advertised_hash());
 
             let sharded_index = ShardedRepodata {
                 info: ShardedSubdirInfo {
@@ -346,17 +414,12 @@ mod tests {
                         move || async move {
                             shard_requests.fetch_add(1, Ordering::SeqCst);
                             match shard_response {
-                                MockShardResponse::Empty => Response::builder()
+                                MockShardResponse::Empty
+                                | MockShardResponse::Truncated
+                                | MockShardResponse::Forged => Response::builder()
                                     .status(StatusCode::OK)
-                                    .body(Body::empty())
+                                    .body(Body::from(shard_response.body()))
                                     .unwrap(),
-                                MockShardResponse::Truncated => {
-                                    // Return some bytes that look like zstd but are truncated
-                                    Response::builder()
-                                        .status(StatusCode::OK)
-                                        .body(Body::from(vec![0x28, 0xb5, 0x2f, 0xfd]))
-                                        .unwrap()
-                                }
                                 MockShardResponse::Status(status) => Response::builder()
                                     .status(status)
                                     .body(Body::empty())
@@ -428,11 +491,42 @@ mod tests {
     #[derive(Clone, Copy)]
     enum MockShardResponse {
         Empty,
+        /// Bytes that look like zstd but are truncated.
         Truncated,
+        /// A valid shard that does not match the hash the index lists for it.
+        Forged,
         /// Answer with this status and an empty body.
         Status(StatusCode),
         /// Never answer.
         Hang,
+    }
+
+    impl MockShardResponse {
+        /// The body of a successful shard response.
+        fn body(self) -> Vec<u8> {
+            match self {
+                MockShardResponse::Truncated => vec![0x28, 0xb5, 0x2f, 0xfd],
+                MockShardResponse::Forged => {
+                    let shard = rmp_serde::to_vec_named(&Shard::default()).unwrap();
+                    zstd::encode_all(shard.as_slice(), 3).unwrap()
+                }
+                MockShardResponse::Empty
+                | MockShardResponse::Status(_)
+                | MockShardResponse::Hang => Vec::new(),
+            }
+        }
+
+        /// The hash the index lists for the shard: the hash of the served
+        /// body, except for a forged shard.
+        fn advertised_hash(self) -> Sha256Hash {
+            match self {
+                MockShardResponse::Forged => compute_bytes_digest::<Sha256>(b"the genuine shard"),
+                MockShardResponse::Empty
+                | MockShardResponse::Truncated
+                | MockShardResponse::Status(_)
+                | MockShardResponse::Hang => compute_bytes_digest::<Sha256>(self.body()),
+            }
+        }
     }
 
     #[tokio::test]
@@ -587,6 +681,39 @@ mod tests {
             .to_string();
 
         insta::assert_snapshot!("truncated_shard_response_error", err_string);
+    }
+
+    /// The shard cache is keyed by the hash the index lists and is shared by
+    /// all channels, so a shard whose bytes do not match that hash must be
+    /// rejected instead of being cached for another channel to read.
+    #[tokio::test]
+    async fn shard_with_wrong_hash_is_rejected_and_not_cached() {
+        let server = MockShardedServer::new(MockShardResponse::Forged).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let subdir = load_index(&server, cache_dir.path()).await.unwrap();
+
+        let package_name = "test-package".parse().unwrap();
+        let err = subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, None)
+            .await
+            .expect_err("the shard does not match its hash");
+        let err_string = regex::Regex::new(r"localhost:\d+")
+            .unwrap()
+            .replace_all(&err.to_string(), "localhost:[PORT]")
+            .to_string();
+        insta::assert_snapshot!(err_string, @"the shard downloaded from 'http://localhost:[PORT]/linux-64/shards/bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6.msgpack.zst' has SHA-256 705e4af249688ae83ad71cc747c34fee1fe00334505894accb903fbfb8ff6017, but the shard index lists bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6");
+
+        let err = subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, None)
+            .await
+            .expect_err("the rejected shard was not cached");
+        assert!(
+            matches!(err, GatewayError::ShardHashMismatch(_)),
+            "expected ShardHashMismatch, got: {err}"
+        );
+
+        // The rejected shard was not cached, so it was downloaded twice.
+        assert_eq!(server.shard_request_count(), 2);
     }
 
     /// Warms the shard *index* cache without ever fetching a shard, then hands
@@ -816,6 +943,7 @@ mod tests {
         let base_url = Url::parse("https://example.com/channel/linux-64/").unwrap();
         let records = super::parse_records(
             rmp_serde::to_vec_named(&shard).unwrap(),
+            PackageName::new_unchecked("foo"),
             channel.base_url.clone(),
             base_url,
         )
@@ -841,6 +969,61 @@ mod tests {
         https://example.com/channel/linux-64/foo-0.1-0.tar.bz2 foo-0.1-0.tar.bz2 https://example.com/channel/
         https://example.com/channel/linux-64/foo-2.0-0.conda foo-2.0-0.conda https://example.com/channel/
         ");
+    }
+
+    /// A shard may list packages other than the one it is looked up by, as
+    /// the alias shards of conda-pypi do. Only the records and removed entries
+    /// of the requested package are returned.
+    #[tokio::test]
+    async fn parse_records_keeps_only_the_requested_package() {
+        let record = |name: &str, version: &str| {
+            PackageRecord::new(
+                PackageName::new_unchecked(name),
+                Version::from_str(version).unwrap(),
+                "0".parse::<BuildString>().unwrap(),
+            )
+        };
+        let identifier =
+            |file_name: &str| DistArchiveIdentifier::try_from_filename(file_name).unwrap();
+
+        let mut shard = Shard::default();
+        shard
+            .conda_packages
+            .insert(identifier("foo-1.0-0.conda"), record("foo", "1.0"));
+        shard.conda_packages.insert(
+            identifier("python-foo-1.0-0.conda"),
+            record("python-foo", "1.0"),
+        );
+        shard.v3.whl.insert(
+            identifier("python-foo-2.0-py3_none_any_0.whl").identifier,
+            WhlPackageRecord {
+                url: UrlOrPath::Path("foo-2.0-py3-none-any.whl".into()),
+                package_record: record("python-foo", "2.0"),
+            },
+        );
+        shard.removed.insert(identifier("foo-0.1-0.tar.bz2"));
+        shard.removed.insert(identifier("python-foo-0.1-0.tar.bz2"));
+
+        let channel = Channel::from_url(Url::parse("https://example.com/channel/").unwrap());
+        let base_url = Url::parse("https://example.com/channel/noarch/").unwrap();
+        let records = super::parse_records(
+            rmp_serde::to_vec_named(&shard).unwrap(),
+            PackageName::new_unchecked("foo"),
+            channel.base_url.clone(),
+            base_url,
+        )
+        .await
+        .unwrap();
+
+        let urls = records.records().map(|(_, record)| &record.url).join("\n");
+        insta::assert_snapshot!(urls, @"https://example.com/channel/noarch/foo-1.0-0.conda");
+
+        let removed = records
+            .removed()
+            .iter()
+            .map(|removed| removed.identifier.to_string())
+            .join("\n");
+        insta::assert_snapshot!(removed, @"foo-0.1-0.tar.bz2");
     }
 
     /// Records which downloads were started and which of those were reported

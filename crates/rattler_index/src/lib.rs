@@ -304,8 +304,11 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// Extract the package record from a `.tar.bz2` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+pub fn package_record_from_tar_bz2_reader(
+    mut reader: impl BufRead,
+) -> std::io::Result<PackageRecord> {
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
     let reader = Cursor::new(&bytes);
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
@@ -376,17 +379,21 @@ fn read_index_json_from_archive(
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+pub fn package_record_from_conda_reader(
+    mut reader: impl BufRead,
+) -> std::io::Result<PackageRecord> {
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
 fn indexed_package_record_from_tar_bz2_reader(
-    reader: impl BufRead,
+    mut reader: impl BufRead,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
     let reader = Cursor::new(&bytes);
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
@@ -400,9 +407,10 @@ fn indexed_package_record_from_tar_bz2_reader(
 }
 
 fn indexed_package_record_from_conda_reader(
-    reader: impl BufRead,
+    mut reader: impl BufRead,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
     read_indexed_json_from_archive(&bytes, &mut archive)

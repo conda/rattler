@@ -1,4 +1,3 @@
-# type: ignore
 import json
 import os
 import shutil
@@ -108,7 +107,7 @@ async def test_index_repodata_revisions_reject_legacy_selection(package_director
         await index_fs(
             package_directory,
             Subdir("noarch"),
-            repodata_revisions=["legacy"],
+            repodata_revisions=["legacy"],  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -129,7 +128,7 @@ async def test_index_repodata_revisions_reject_legacy_mapping(package_directory)
         await index_fs(
             package_directory,
             Subdir("noarch"),
-            repodata_revisions={"v3": {"n_packages": 1}},  # type: ignore[arg-type]
+            repodata_revisions={"v3": {"n_packages": 1}},  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -144,6 +143,7 @@ class S3Config:
     endpoint_url: str = "https://e1a7cde76f1780ec06bac859036dbaf7.r2.cloudflarestorage.com"
     bucket_name: str = "rattler-build-upload-test"
     channel_name: str = field(default_factory=lambda: f"channel{uuid.uuid4()}")
+    session_token: str | None = None
 
 
 @pytest.fixture()

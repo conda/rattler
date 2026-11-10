@@ -106,6 +106,21 @@ impl PySparseRepoData {
         py.detach(move || Self::from_args(channel, subdir, path))
     }
 
+    /// Construct sparse repodata from owned, uncompressed JSON bytes.
+    #[staticmethod]
+    pub fn from_bytes(
+        py: Python<'_>,
+        channel: PyChannel,
+        subdir: String,
+        data: Vec<u8>,
+    ) -> PyResult<Self> {
+        py.detach(move || {
+            let sparse = SparseRepoData::from_bytes(channel.into(), subdir, data.into(), None)
+                .map_err(std::io::Error::from)?;
+            Ok(sparse.into())
+        })
+    }
+
     pub fn package_names(
         &self,
         py: Python<'_>,

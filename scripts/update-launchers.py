@@ -58,7 +58,7 @@ LAUNCHERS = {
 def download(release: str, asset: str) -> bytes:
     url = f"https://github.com/{REPO}/releases/download/{release}/{asset}"
     print(f"Downloading {url}")
-    with urllib.request.urlopen(url) as response:  # noqa: S310 (trusted URL)
+    with urllib.request.urlopen(url) as response:
         return response.read()
 
 

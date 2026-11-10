@@ -14,6 +14,8 @@ use rattler_conda_types::Subdir;
 use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile};
 use rattler_vfs::{MountConfig, Transport, build_and_mount, compute_env_hash};
 
+use super::progress::wrap_in_async_progress;
+
 /// Mount a lockfile as a virtual conda environment.
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -21,33 +23,35 @@ pub struct Opt {
     pub lock_file: PathBuf,
 
     /// Where the virtual environment should appear.
+    #[clap(long, short = 'm')]
     pub mount_point: PathBuf,
 
     /// Environment name in the lock file.
     #[clap(long, default_value = DEFAULT_ENVIRONMENT_NAME)]
     pub environment: String,
 
-    /// Persistent writable overlay directory. If omitted, the mount is read-only.
-    /// Required for `ProjFS` (which is always writable).
-    #[clap(long)]
+    /// Persistent writable overlay directory. If omitted, the mount is
+    /// read-only. Required for `ProjFS`, which is always writable.
+    #[clap(long, required_if_eq("transport", "projfs"))]
     pub overlay: Option<PathBuf>,
 
-    /// Transport backend. Defaults to the platform's preferred transport.
-    #[clap(long, value_enum, default_value_t = TransportArg::Auto)]
+    /// Transport backend. Defaults to the platform's preferred transport
+    /// (FUSE on Linux, NFS on macOS, `ProjFS` on Windows).
+    #[clap(long, value_enum, default_value_t = TransportArg::platform_default())]
     pub transport: TransportArg,
 
-    /// Allow other users to access the mount (FUSE only; requires
-    /// `user_allow_other` in `/etc/fuse.conf`).
+    /// Allow other users to access the mount. FUSE only (requires
+    /// `user_allow_other` in `/etc/fuse.conf`); rejected for other transports.
     #[clap(long)]
     pub allow_other: bool,
 }
 
 /// Transport selector exposed on the CLI. Mirrors [`rattler_vfs::Transport`]
-/// but with snake-case clap-friendly variants.
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+/// but with snake-case clap-friendly variants. There is no `auto` variant —
+/// the default is resolved to a concrete transport at parse time so the chosen
+/// backend is always explicit in `--help` and in error messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum TransportArg {
-    /// Platform default: FUSE on Linux, NFS on macOS, `ProjFS` on Windows.
-    Auto,
     /// FUSE via libfuse3 (Linux) or macFUSE (macOS).
     Fuse,
     /// `NFSv3` userspace server on localhost.
@@ -56,10 +60,20 @@ pub enum TransportArg {
     Projfs,
 }
 
+impl TransportArg {
+    /// The platform's preferred transport, mirroring [`Transport::best`].
+    fn platform_default() -> Self {
+        match Transport::best() {
+            Transport::Fuse => Self::Fuse,
+            Transport::Nfs => Self::Nfs,
+            Transport::ProjFs => Self::Projfs,
+        }
+    }
+}
+
 impl From<TransportArg> for Transport {
     fn from(t: TransportArg) -> Self {
         match t {
-            TransportArg::Auto => Transport::Auto,
             TransportArg::Fuse => Transport::Fuse,
             TransportArg::Nfs => Transport::Nfs,
             TransportArg::Projfs => Transport::ProjFs,
@@ -93,28 +107,39 @@ pub async fn mount(opt: Opt) -> Result<()> {
     std::fs::create_dir_all(&mount_point).into_diagnostic()?;
     let transport: Transport = opt.transport.into();
 
-    let config = match opt.overlay {
-        Some(overlay) => {
-            MountConfig::new_writable(mount_point.clone(), Some(overlay), transport, env_hash)
-        }
-        None => MountConfig::new_read_only(mount_point.clone(), transport, env_hash),
-    };
+    // `--allow-other` is a FUSE-only mount option; reject it for other
+    // transports rather than silently ignoring it.
+    if opt.allow_other && transport != Transport::Fuse {
+        miette::bail!(
+            "--allow-other is only supported with the FUSE transport (got {})",
+            transport.name()
+        );
+    }
+
+    let mut config = MountConfig::new(mount_point.clone(), transport, env_hash);
+    if let Some(overlay) = opt.overlay {
+        config = config.with_writable(overlay);
+    }
     let config = config.with_allow_other(opt.allow_other);
 
-    let handle = build_and_mount(
-        &lockfile,
-        &opt.environment,
-        platform,
-        &package_cache,
-        &config,
+    let handle = wrap_in_async_progress(
+        format!("building and mounting {}", opt.lock_file.display()),
+        build_and_mount(
+            &lockfile,
+            &opt.environment,
+            platform,
+            &package_cache,
+            &config,
+        ),
     )
     .await
     .map_err(anyhow_to_miette)?;
 
     eprintln!(
-        "mounted {} at {}",
+        "mounted {} at {} (via {})",
         opt.lock_file.display(),
-        mount_point.display()
+        mount_point.display(),
+        transport.name(),
     );
 
     // Wait for ctrl-c (or sigterm on Unix) then explicitly unmount so any

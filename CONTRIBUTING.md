@@ -2,11 +2,23 @@
 
 We would love to have you contribute!
 For a good list of things you could help us with, take a look at our [*good first issues*](https://github.com/conda/rattler/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
-If you want to go deeper though, any [open issue](https://github.com/conda/rattler/issues) is up for grabs.
-Just let us know what you start on something.
+Before starting work, agree on the proposed change with a maintainer on an issue or on Discord.
 
 For questions, requests or a casual chat, we are very active on our discord server.
 You can [join our discord server via this link](https://discord.gg/kKV8ZxyzY4).
+
+## Pull Request Prerequisite: Vouching
+
+We use a vouch system to mitigate spam. Before opening a pull request:
+
+1. [Open a discussion in the "Vouch Request" category](https://github.com/conda/rattler/discussions/new?category=vouch-request). Briefly introduce yourself and describe what you want to change and why. Write this yourself, without AI.
+2. A maintainer will comment `vouch` if approved.
+
+For an existing pull request, a maintainer can instead comment `vouch` on the pull request to vouch for its author.
+
+If you are already vouched for another project using the shared registry, such as [Pixi](https://github.com/prefix-dev/pixi), you don't need to request it again.
+Pull requests from unvouched contributors are automatically closed.
+A vouch is not approval of a specific change: agree on it with a maintainer before opening a pull request.
 
 ## Development
 If you'd like to contribute code, then you may want to manage the build depends with a tool, we suggest pixi, but conda/mamba will also work.

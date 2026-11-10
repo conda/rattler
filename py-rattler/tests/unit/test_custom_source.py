@@ -202,7 +202,7 @@ def test_invalid_source_type() -> None:
 
         asyncio.run(
             gateway.query(
-                sources=[NotASource()],  # type: ignore[list-item]
+                sources=[NotASource()],  # ty: ignore[invalid-argument-type]
                 platforms=["linux-64"],
                 specs=["test"],
                 recursive=False,

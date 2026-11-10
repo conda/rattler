@@ -23,9 +23,15 @@ from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.networking import Client, fetch_repo_data
 from rattler.package import (
     AboutJson,
+    ArchiveIdentifier,
     BuildString,
+    CondaArchiveIdentifier,
+    CondaArchiveType,
+    EntryPoint,
     FileMode,
     IndexJson,
+    LinkJson,
+    NoArchLinks,
     NoArchLiteral,
     NoArchType,
     PackageName,
@@ -33,6 +39,7 @@ from rattler.package import (
     PathsJson,
     PathType,
     PrefixPlaceholder,
+    PythonEntryPoints,
     RunExportsJson,
 )
 from rattler.package_cache import CacheIndex, PackageCache, PackageCacheLayer, ValidationMode
@@ -97,6 +104,7 @@ del _get_rattler_version
 
 __all__ = [
     "AboutJson",
+    "ArchiveIdentifier",
     "BuildString",
     "CacheIndex",
     "CertificateClaims",
@@ -108,6 +116,8 @@ __all__ = [
     "ChannelPriority",
     "ChannelRelations",
     "Client",
+    "CondaArchiveIdentifier",
+    "CondaArchiveType",
     "CondaLockedBinaryPackage",
     "CondaLockedPackage",
     "CondaLockedSourcePackage",
@@ -120,6 +130,7 @@ __all__ = [
     "DetectorRegistration",
     "DetectorRegistrations",
     "DetectorResult",
+    "EntryPoint",
     "Environment",
     "FileMode",
     "Gateway",
@@ -130,6 +141,7 @@ __all__ = [
     "InstallerReporter",
     "Issuer",
     "Link",
+    "LinkJson",
     "LinkType",
     "LockChannel",
     "LockFile",
@@ -138,6 +150,7 @@ __all__ = [
     "MatchSpec",
     "MultiSource",
     "NamelessMatchSpec",
+    "NoArchLinks",
     "NoArchLiteral",
     "NoArchType",
     "Override",
@@ -159,6 +172,7 @@ __all__ = [
     "PrefixRecord",
     "Publisher",
     "PypiLockedPackage",
+    "PythonEntryPoints",
     "RejectedDetectorRegistration",
     "RemovedPackage",
     "RepoData",

@@ -1,4 +1,5 @@
 mod about_json;
+mod archive_identifier;
 mod build_string;
 mod channel;
 mod config;
@@ -35,11 +36,13 @@ mod who_needs;
 
 mod exceptions;
 mod index_json;
+mod link_json;
 mod run_exports_json;
 
 use std::ops::Deref;
 
 use about_json::PyAboutJson;
+use archive_identifier::{PyArchiveIdentifier, PyCondaArchiveIdentifier, PyCondaArchiveType};
 use build_string::PyBuildString;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use config::PyConfig;
@@ -60,6 +63,7 @@ use generic_virtual_package::PyGenericVirtualPackage;
 use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
 use installer::py_install;
+use link_json::{PyEntryPoint, PyLinkJson, PyNoArchLinks, PyPythonEntryPoints};
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockPlatform, PyLockedPackage, PyPackageHashes,
     PyPypiPackageData,
@@ -217,7 +221,15 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     m.add_class::<PyAboutJson>()?;
 
+    m.add_class::<PyArchiveIdentifier>()?;
+    m.add_class::<PyCondaArchiveType>()?;
+    m.add_class::<PyCondaArchiveIdentifier>()?;
+
     m.add_class::<PyRunExportsJson>()?;
+    m.add_class::<PyLinkJson>()?;
+    m.add_class::<PyNoArchLinks>()?;
+    m.add_class::<PyPythonEntryPoints>()?;
+    m.add_class::<PyEntryPoint>()?;
     m.add_class::<PyPathsJson>()?;
     m.add_class::<PyPathsEntry>()?;
     m.add_class::<PyPathType>()?;

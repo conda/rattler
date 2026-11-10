@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.1...rattler_vfs-v0.2.2) - 2026-11-06
+
+### Added
+
+- *(exec)* mount temporary environments via rattler_vfs ([#2618](https://github.com/conda/rattler/pull/2618))
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.0...rattler_vfs-v0.2.1) - 2026-11-04
+
+### Other
+
+- *(ci)* Update Rust crate nfs3_server to 0.11 ([#3066](https://github.com/conda/rattler/pull/3066))
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.4...rattler_vfs-v0.2.0) - 2026-11-02
+
+### Other
+
+- *(rattler_vfs)* ergonomics, typed errors & perf ([#2808](https://github.com/conda/rattler/pull/2808))
+
+## [0.1.4](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.3...rattler_vfs-v0.1.4) - 2026-10-30
+
+### Fixed
+
+- *(rattler_vfs)* correctness & security fixes ([#2807](https://github.com/conda/rattler/pull/2807))
+
+### Other
+
+- *(ci)* Update Rust crate fuser to 0.18 ([#3054](https://github.com/conda/rattler/pull/3054))
+
+## [0.1.3](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.2...rattler_vfs-v0.1.3) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler, rattler_cache, rattler_lock
+
+## [0.1.2](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.1...rattler_vfs-v0.1.2) - 2026-10-28
+
+### Other
+
+- updated the following local packages: rattler_cache, rattler, rattler_networking, rattler_lock
+
 ## [0.1.1](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.0...rattler_vfs-v0.1.1) - 2026-10-27
 
 ### Other

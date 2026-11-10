@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3](https://github.com/conda/rattler/compare/rattler_cache-v0.12.2...rattler_cache-v0.12.3) - 2026-11-06
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.12.2](https://github.com/conda/rattler/compare/rattler_cache-v0.12.1...rattler_cache-v0.12.2) - 2026-11-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.12.1](https://github.com/conda/rattler/compare/rattler_cache-v0.12.0...rattler_cache-v0.12.1) - 2026-11-02
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming
+
+## [0.12.0](https://github.com/conda/rattler/compare/rattler_cache-v0.11.1...rattler_cache-v0.12.0) - 2026-10-30
+
+### Fixed
+
+- *(cache)* [**breaking**] record the sha256 of fetched packages and don't reuse unhashed entries ([#2959](https://github.com/conda/rattler/pull/2959))
+
+## [0.11.1](https://github.com/conda/rattler/compare/rattler_cache-v0.11.0...rattler_cache-v0.11.1) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.11.0](https://github.com/conda/rattler/compare/rattler_cache-v0.10.21...rattler_cache-v0.11.0) - 2026-10-28
+
+### Added
+
+- *(cache)* download and cache wheels as extracted conda packages ([#2964](https://github.com/conda/rattler/pull/2964))
+
 ## [0.10.21](https://github.com/conda/rattler/compare/rattler_cache-v0.10.20...rattler_cache-v0.10.21) - 2026-10-27
 
 ### Other

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.1.7](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.1.6...rattler_virtual_packages-v8.1.7) - 2026-11-06
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [8.1.6](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.1.5...rattler_virtual_packages-v8.1.6) - 2026-11-04
+
+### Fixed
+
+- detect glibc on minimal Linux systems without ldd ([#3105](https://github.com/conda/rattler/pull/3105))
+
+## [8.1.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.1.4...rattler_virtual_packages-v8.1.5) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [8.1.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.1.3...rattler_virtual_packages-v8.1.4) - 2026-10-27
 
 ### Other
