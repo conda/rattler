@@ -6,8 +6,9 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::RepoDataRecord;
 use rattler_sigstore::{
-    ChannelCheck, FulcioCiClaims, Issuer, Publisher, TrustedRoot, VerificationConfig,
-    VerificationOutcome, VerificationPolicy, VerifiedAttestation, VerifiedChecks,
+    ChannelCheck, FulcioCiClaims, GitHubTrustDomain, Issuer, Publisher, TrustedRoot,
+    VerificationConfig, VerificationOutcome, VerificationPolicy, VerifiedAttestation,
+    VerifiedChecks,
 };
 
 use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware, record::PyRecord};
@@ -100,10 +101,17 @@ fn verification_config(
     issuer: Option<String>,
     channel_check: &str,
     max_sidecar_size: u64,
+    github_trust_domains: Vec<String>,
 ) -> PyResult<VerificationConfig> {
+    let github_trust_domains = github_trust_domains
+        .iter()
+        .map(|trust_domain| trust_domain.parse::<GitHubTrustDomain>())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
     Ok(VerificationConfig::new(publisher(identity, issuer)?)
         .with_channel_check(parse_channel_check(channel_check)?)
-        .with_max_sidecar_size(max_sidecar_size))
+        .with_max_sidecar_size(max_sidecar_size)
+        .with_github_trust_domains(github_trust_domains))
 }
 
 #[pymethods]
@@ -116,12 +124,13 @@ impl PyVerificationPolicy {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (identity=None, issuer=None, channel_check="require", max_sidecar_size=rattler_sigstore::DEFAULT_MAX_SIDECAR_SIZE))]
+    #[pyo3(signature = (identity=None, issuer=None, channel_check="require", max_sidecar_size=rattler_sigstore::DEFAULT_MAX_SIDECAR_SIZE, github_trust_domains=vec!["github.com".to_string()]))]
     pub fn warn(
         identity: Option<String>,
         issuer: Option<String>,
         channel_check: &str,
         max_sidecar_size: u64,
+        github_trust_domains: Vec<String>,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: VerificationPolicy::Warn(verification_config(
@@ -129,17 +138,19 @@ impl PyVerificationPolicy {
                 issuer,
                 channel_check,
                 max_sidecar_size,
+                github_trust_domains,
             )?),
         })
     }
 
     #[staticmethod]
-    #[pyo3(signature = (identity=None, issuer=None, channel_check="require", max_sidecar_size=rattler_sigstore::DEFAULT_MAX_SIDECAR_SIZE))]
+    #[pyo3(signature = (identity=None, issuer=None, channel_check="require", max_sidecar_size=rattler_sigstore::DEFAULT_MAX_SIDECAR_SIZE, github_trust_domains=vec!["github.com".to_string()]))]
     pub fn require(
         identity: Option<String>,
         issuer: Option<String>,
         channel_check: &str,
         max_sidecar_size: u64,
+        github_trust_domains: Vec<String>,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: VerificationPolicy::Require(verification_config(
@@ -147,6 +158,7 @@ impl PyVerificationPolicy {
                 issuer,
                 channel_check,
                 max_sidecar_size,
+                github_trust_domains,
             )?),
         })
     }
@@ -394,8 +406,9 @@ pub fn py_verify_attestation<'py>(
     let record: RepoDataRecord = PyRecord::try_from(record)?.try_into()?;
     future_into_py(py, async move {
         // Without an explicit root the production one is loaded over TUF, which
-        // needs the network; with one, verification is entirely local apart
-        // from fetching the sidecar.
+        // needs the network; with one, verification is local apart from
+        // fetching the sidecar and, when a package needs them, the roots of
+        // the GitHub trust domains the policy opts into.
         let outcome = match trusted_root {
             Some(trusted_root) => {
                 rattler_sigstore::verify_record_with_trusted_root(

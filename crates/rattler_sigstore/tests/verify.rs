@@ -583,6 +583,104 @@ fn bundles_without_a_transparency_log_try_every_github_root() {
     );
 }
 
+/// A trusted root that cannot be used: its certificate authority is not a
+/// certificate.
+fn unusable_root() -> TrustedRoot {
+    TrustedRoot::from_json(
+        r#"{
+            "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+            "tlogs": [],
+            "certificateAuthorities": [{
+                "subject": {"organization": "example", "commonName": "example"},
+                "uri": "https://fulcio.example.com",
+                "certChain": {"certificates": [{"rawBytes": "bm90IGEgY2VydGlmaWNhdGU="}]},
+                "validFor": {"start": "2020-01-01T00:00:00Z"}
+            }],
+            "ctlogs": [],
+            "timestampAuthorities": []
+        }"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_unusable_github_root_only_affects_the_bundles_that_need_it() {
+    let channel = Url::parse("https://prefix.dev/github-releases/").unwrap();
+    let record = record(&channel, Some(sidecar_hash()));
+    let logged = rattler_sigstore::parse_sidecar(&record.url, SIDECAR, &sidecar_hash())
+        .unwrap()
+        .bundles;
+    let log_less =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_PRIVATE_BUNDLE}]").as_bytes())
+            .unwrap();
+    let bundles = [logged, log_less].concat();
+
+    let public_good = trusted_root();
+    let unusable = unusable_root();
+    let region = GitHubTrustDomain::region("prod-weu-01").unwrap();
+    let unavailable = GitHubTrustDomain::region("prod-eus-01").unwrap();
+    let roots = TrustedRoots::new(&public_good)
+        .with_github(region, &unusable)
+        .with_unavailable_github(unavailable, "tuf-repo.github.com could not be reached");
+    let result =
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots).unwrap();
+
+    // The public-good bundle still verifies.
+    assert_eq!(result.verified.len(), 1, "{:?}", result.rejected);
+    assert_eq!(result.verified[0].index, 0);
+
+    // The bundle without a log entry names both roots that could not be used.
+    assert_eq!(result.rejected.len(), 1);
+    let reason = &result.rejected[0].reason;
+    assert!(
+        reason.contains("GitHub instance of prod-weu-01: the trusted root could not be loaded"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains(
+            "GitHub instance of prod-eus-01: the trusted root could not be loaded: \
+             tuf-repo.github.com could not be reached"
+        ),
+        "{reason}"
+    );
+}
+
+#[test]
+fn a_github_root_with_a_transparency_log_verifies_logged_bundles() {
+    let channel = Url::parse("https://prefix.dev/github-releases/").unwrap();
+    let record = record(&channel, Some(sidecar_hash()));
+    let sidecar = rattler_sigstore::parse_sidecar(&record.url, SIDECAR, &sidecar_hash()).unwrap();
+
+    // The public-good root stands in for the root of a GitHub instance that
+    // keeps a transparency log, and the staging root for a public-good root
+    // that did not sign the bundle.
+    let other = TrustedRoot::from_embedded(SigstoreInstance::Staging).unwrap();
+    let with_log = trusted_root();
+    let roots = TrustedRoots::new(&other).with_github(GitHubTrustDomain::github_com(), &with_log);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &sidecar.bundles, ChannelCheck::Require, roots)
+            .unwrap();
+    assert!(result.rejected.is_empty(), "{:?}", result.rejected);
+    let attestation = &result.verified[0];
+    assert_eq!(attestation.instance, SigstoreInstance::GitHub);
+    // The log is not skipped for a root that lists one.
+    assert!(attestation.checks.transparency_log);
+    assert!(attestation.checks.signed_certificate_timestamp);
+
+    // A GitHub root without a log is not tried for a bundle with a log entry.
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+    let roots = TrustedRoots::new(&other).with_github(GitHubTrustDomain::github_com(), &github);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &sidecar.bundles, ChannelCheck::Require, roots)
+            .unwrap();
+    assert!(result.verified.is_empty());
+    assert!(
+        !result.rejected[0].reason.contains("GitHub instance"),
+        "{}",
+        result.rejected[0].reason
+    );
+}
+
 /// An attestation `actions/attest` made with GitHub's instance on github.com,
 /// for the `attest-demo` workflow of the `actions` organization. It comes from
 /// the GitHub CLI's test data
@@ -638,9 +736,10 @@ fn github_roots_only_vouch_for_their_own_trust_domain() {
 /// Verifies `record` with `roots` and returns why it was rejected.
 ///
 /// The configured trust domains only select what `verify_record` fetches;
-/// explicitly passed roots are used as they are, so none are configured here.
+/// explicitly passed roots are used as they are, and none are configured by
+/// default.
 async fn rejection_reasons(record: &RepoDataRecord, roots: TrustedRoots<'_>) -> Vec<String> {
-    let config = VerificationConfig::new(Publisher::new()).with_github_trust_domains([]);
+    let config = VerificationConfig::new(Publisher::new());
     match verify_record_with_trusted_roots(
         &VerificationPolicy::Require(config),
         record,

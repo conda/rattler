@@ -27,6 +27,7 @@
 //! authority and is verified against the trusted root of a GitHub trust
 //! domain: github.com, or a GitHub Enterprise Cloud data residency region (see
 //! [`TrustedRoots`] and [`VerificationConfig::with_github_trust_domains`]).
+//! github.com is trusted by default, regions only when they are configured.
 
 use jiff::Timestamp;
 use rattler_conda_types::RepoDataRecord;
@@ -41,7 +42,8 @@ use sigstore_verify::{
 };
 use std::{
     collections::HashMap,
-    sync::{LazyLock, Mutex},
+    sync::{Arc, LazyLock, Mutex},
+    time::{Duration, Instant},
 };
 use tokio::sync::OnceCell;
 use url::Url;
@@ -206,7 +208,9 @@ pub struct BundleVerification {
 /// root. Bundles without one can only come from a GitHub artifact attestation
 /// instance, which GitHub uses for private and internal repositories; they are
 /// verified against the GitHub roots that were added, of which one must
-/// accept the bundle, and rejected when there are none.
+/// accept the bundle, and rejected when there are none. A GitHub root that
+/// lists a transparency log of its own is also tried for bundles with a log
+/// entry that the public-good root does not accept.
 ///
 /// Each GitHub root belongs to a [`GitHubTrustDomain`] and only vouches for
 /// the GitHub Actions identities of that domain (see
@@ -223,6 +227,10 @@ pub struct BundleVerification {
 pub struct TrustedRoots<'a> {
     public_good: &'a TrustedRoot,
     github: Vec<(GitHubTrustDomain, &'a TrustedRoot)>,
+    /// Configured GitHub trust domains whose root could not be loaded, with
+    /// the reason. They are named in the rejection of the bundles that would
+    /// have needed them.
+    github_unavailable: Vec<(GitHubTrustDomain, String)>,
 }
 
 impl<'a> TrustedRoots<'a> {
@@ -231,6 +239,7 @@ impl<'a> TrustedRoots<'a> {
         Self {
             public_good,
             github: Vec::new(),
+            github_unavailable: Vec::new(),
         }
     }
 
@@ -239,6 +248,20 @@ impl<'a> TrustedRoots<'a> {
     /// trust domain.
     pub fn with_github(mut self, trust_domain: GitHubTrustDomain, root: &'a TrustedRoot) -> Self {
         self.github.push((trust_domain, root));
+        self
+    }
+
+    /// Records that the root of the trusted GitHub trust domain `trust_domain`
+    /// could not be loaded, for example because GitHub's TUF repository could
+    /// not be reached. Nothing is verified against it, but the rejection of a
+    /// bundle that would have needed it names `reason` instead of only saying
+    /// that GitHub's instance is not trusted.
+    pub fn with_unavailable_github(
+        mut self,
+        trust_domain: GitHubTrustDomain,
+        reason: impl Into<String>,
+    ) -> Self {
+        self.github_unavailable.push((trust_domain, reason.into()));
         self
     }
 
@@ -277,40 +300,137 @@ pub async fn production_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
         .await
 }
 
-/// Process-wide cache of the trusted roots of GitHub trust domains. Each
-/// configured trust domain gets one cell, which lives for the rest of the
-/// process; there are only a handful of trust domains.
+/// How long a fetched GitHub trusted root is used before it is fetched again.
+/// GitHub rotates its certificate and timestamp authorities, so a long-running
+/// process must not keep a root forever.
+const GITHUB_TRUSTED_ROOT_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How long a failed fetch of a GitHub trusted root is remembered, so that
+/// verifying many records while GitHub's TUF repository is unreachable does
+/// not repeat the fetch for every record.
+const GITHUB_TRUSTED_ROOT_RETRY_AFTER: Duration = Duration::from_secs(60);
+
+/// The cached trusted root of one GitHub trust domain.
+#[derive(Default)]
+struct CachedGitHubRoot {
+    /// The last root that was fetched, and when.
+    root: Option<(Instant, Arc<TrustedRoot>)>,
+    /// The last failed fetch, and when.
+    failure: Option<(Instant, String)>,
+}
+
+/// Process-wide cache of the trusted roots of GitHub trust domains, one entry
+/// per trust domain that was asked for. The async mutex of an entry serializes
+/// the fetches of that trust domain.
 static GITHUB_TRUSTED_ROOTS: LazyLock<
-    Mutex<HashMap<GitHubTrustDomain, &'static OnceCell<TrustedRoot>>>,
+    Mutex<HashMap<GitHubTrustDomain, Arc<tokio::sync::Mutex<CachedGitHubRoot>>>>,
 > = LazyLock::new(Default::default);
 
 /// Returns the trusted root of a GitHub artifact attestation trust domain,
-/// fetching it through GitHub's TUF repository on first use.
+/// fetching it through GitHub's TUF repository.
 ///
 /// GitHub signs attestations of private and internal repositories with these
 /// instances: github.com with [`GitHubTrustDomain::github_com`], GitHub
 /// Enterprise Cloud tenants with data residency with the instance of their
-/// region. Failures are not cached so a later call can retry.
+/// region.
+///
+/// The root is cached per process and trust domain and fetched again once a
+/// day, so that a long-running process follows GitHub's key rotations. If
+/// that refresh fails, the previous root keeps being used. A failed fetch is
+/// remembered for a minute before it is tried again.
 pub async fn github_trusted_root(
     trust_domain: &GitHubTrustDomain,
-) -> SigstoreResult<&'static TrustedRoot> {
-    let cell = {
-        let mut cells = GITHUB_TRUSTED_ROOTS
+) -> SigstoreResult<Arc<TrustedRoot>> {
+    let entry = {
+        let mut entries = GITHUB_TRUSTED_ROOTS
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let cell: &mut &'static OnceCell<TrustedRoot> = cells
-            .entry(trust_domain.clone())
-            .or_insert_with(|| Box::leak(Box::new(OnceCell::new())));
-        *cell
+        Arc::clone(entries.entry(trust_domain.clone()).or_default())
     };
-    cell.get_or_try_init(|| async {
+    let mut cached = entry.lock().await;
+    refresh_github_root(&mut cached, Instant::now, trust_domain, || async {
         TrustedRoot::from_tuf_target(TufConfig::github(), &trust_domain.trusted_root_target())
             .await
-            .map_err(|err| {
-                SigstoreError::TrustedRoot(format!("GitHub trust domain {trust_domain}: {err}"))
-            })
+            .map_err(|err| err.to_string())
     })
     .await
+}
+
+/// Returns the cached root if it is fresh, and otherwise fetches it with
+/// `fetch`, unless a fetch failed recently.
+///
+/// `clock` is read again once the fetch has finished: a fetch that fails
+/// slowly, such as one that runs into a timeout, must still be remembered for
+/// the whole retry interval, or everyone waiting for it would repeat it.
+async fn refresh_github_root<C, F, Fut>(
+    cached: &mut CachedGitHubRoot,
+    clock: C,
+    trust_domain: &GitHubTrustDomain,
+    fetch: F,
+) -> SigstoreResult<Arc<TrustedRoot>>
+where
+    C: Fn() -> Instant,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<TrustedRoot, String>>,
+{
+    let now = clock();
+    let stale = match &cached.root {
+        Some((fetched, root)) if now.duration_since(*fetched) < GITHUB_TRUSTED_ROOT_TTL => {
+            return Ok(Arc::clone(root));
+        }
+        Some((_, root)) => Some(Arc::clone(root)),
+        None => None,
+    };
+
+    let failure = match &cached.failure {
+        Some((failed, message))
+            if now.duration_since(*failed) < GITHUB_TRUSTED_ROOT_RETRY_AFTER =>
+        {
+            message.clone()
+        }
+        _ => match fetch().await {
+            Ok(root) => {
+                let root = Arc::new(root);
+                cached.root = Some((clock(), Arc::clone(&root)));
+                cached.failure = None;
+                return Ok(root);
+            }
+            Err(err) => {
+                let message = format!("GitHub trust domain {trust_domain}: {err}");
+                cached.failure = Some((clock(), message.clone()));
+                message
+            }
+        },
+    };
+
+    match stale {
+        Some(root) => {
+            tracing::warn!(
+                "failed to refresh the Sigstore trusted root, using the previous one: {failure}"
+            );
+            Ok(root)
+        }
+        None => Err(SigstoreError::TrustedRoot(failure)),
+    }
+}
+
+/// Returns the trusted root of a GitHub trust domain that is embedded in the
+/// binary, for verification without network access.
+///
+/// Like [`embedded_trusted_root`] this is a snapshot that ages with this
+/// crate's dependencies. Only github.com's root is embedded; the roots of
+/// GitHub Enterprise Cloud data residency regions have to be fetched with
+/// [`github_trusted_root`].
+pub fn embedded_github_trusted_root(
+    trust_domain: &GitHubTrustDomain,
+) -> SigstoreResult<TrustedRoot> {
+    if !trust_domain.is_github_com() {
+        return Err(SigstoreError::TrustedRoot(format!(
+            "GitHub trust domain {trust_domain}: only the trusted root of github.com is embedded"
+        )));
+    }
+    TrustedRoot::from_embedded(SigstoreInstance::GitHub)
+        .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
 }
 
 /// Returns true if `bundle` carries no transparency log entry, which is the
@@ -379,51 +499,78 @@ pub fn verify_bundles_with_trusted_roots(
     let expected_channel = expected_channel(record);
 
     let public_good = InstanceVerifier::public_good(trusted_roots.public_good)?;
-    // Only build the GitHub verifiers when a bundle needs them.
-    let github = if bundles.iter().any(lacks_transparency_log_entry) {
+    // Only build the GitHub verifiers when a bundle can need them: a bundle
+    // without a log entry, or a root that keeps a log of its own. A root that
+    // cannot be used only affects the bundles that would have needed it.
+    let github: Vec<GitHubInstance> = if bundles.iter().any(lacks_transparency_log_entry)
+        || trusted_roots
+            .github
+            .iter()
+            .any(|(_, root)| !root.tlogs.is_empty())
+    {
         trusted_roots
             .github
             .iter()
-            .map(|(trust_domain, root)| InstanceVerifier::github(trust_domain, root))
-            .collect::<SigstoreResult<Vec<_>>>()?
+            .map(|(trust_domain, root)| GitHubInstance::new(trust_domain, root))
+            .chain(
+                trusted_roots
+                    .github_unavailable
+                    .iter()
+                    .map(|(trust_domain, reason)| {
+                        GitHubInstance::unavailable(trust_domain, reason)
+                    }),
+            )
+            .collect()
     } else {
         Vec::new()
     };
 
     let mut result = BundleVerification::default();
     for (index, bundle) in bundles.iter().enumerate() {
-        let instances = if lacks_transparency_log_entry(bundle) {
-            if github.is_empty() {
-                result.rejected.push(RejectedAttestation {
-                    index,
-                    reason: "the bundle has no transparency log entry, as signed by \
-                             GitHub's artifact attestation instance for private \
-                             repositories, which is not trusted"
-                        .to_string(),
-                });
-                continue;
-            }
-            github.as_slice()
-        } else {
-            std::slice::from_ref(&public_good)
-        };
-
         // A bundle names no trusted root, so try each candidate, as
         // `gh attestation verify` does with several trusted roots.
+        let lacks_log_entry = lacks_transparency_log_entry(bundle);
+        let candidates: Vec<Candidate<'_>> = (!lacks_log_entry)
+            .then_some(Candidate::Ready(&public_good))
+            .into_iter()
+            .chain(
+                github
+                    .iter()
+                    .filter(|instance| instance.is_candidate_for(lacks_log_entry))
+                    .map(GitHubInstance::candidate),
+            )
+            .collect();
+        if candidates.is_empty() {
+            result.rejected.push(RejectedAttestation {
+                index,
+                reason: "the bundle has no transparency log entry, as signed by \
+                         GitHub's artifact attestation instance for private \
+                         repositories, which is not trusted"
+                    .to_string(),
+            });
+            continue;
+        }
+
         let mut reasons = Vec::new();
-        let verified = instances.iter().find_map(|instance| {
-            match verify_bundle(
-                instance,
-                artifact.clone(),
-                bundle,
-                &filename,
-                expected_channel.as_ref(),
-                channel_check,
-            ) {
+        let verified = candidates.iter().find_map(|candidate| {
+            let outcome = match candidate {
+                Candidate::Ready(instance) => verify_bundle(
+                    instance,
+                    artifact.clone(),
+                    bundle,
+                    &filename,
+                    expected_channel.as_ref(),
+                    channel_check,
+                ),
+                Candidate::Unavailable { reason, .. } => {
+                    Err(format!("the trusted root could not be loaded: {reason}"))
+                }
+            };
+            match outcome {
                 Ok(verified) => Some(verified),
                 Err(reason) => {
-                    reasons.push(if instances.len() > 1 {
-                        format!("{}: {reason}", instance.name)
+                    reasons.push(if candidates.len() > 1 {
+                        format!("{}: {reason}", candidate.name())
                     } else {
                         reason
                     });
@@ -445,6 +592,76 @@ pub fn verify_bundles_with_trusted_roots(
     Ok(result)
 }
 
+/// A trusted GitHub instance: its verifier, or why it cannot be used.
+struct GitHubInstance {
+    name: String,
+    verifier: Result<InstanceVerifier, String>,
+}
+
+impl GitHubInstance {
+    fn new(trust_domain: &GitHubTrustDomain, trusted_root: &TrustedRoot) -> Self {
+        Self {
+            name: github_instance_name(trust_domain),
+            verifier: InstanceVerifier::github(trust_domain, trusted_root)
+                .map_err(|err| err.to_string()),
+        }
+    }
+
+    fn unavailable(trust_domain: &GitHubTrustDomain, reason: &str) -> Self {
+        Self {
+            name: github_instance_name(trust_domain),
+            verifier: Err(reason.to_string()),
+        }
+    }
+
+    /// Whether this instance can have signed a bundle with or without a
+    /// transparency log entry. An instance without a log signs bundles without
+    /// an entry; one that keeps a log signs bundles with an entry, although a
+    /// bundle without one is still passed to it so that the rejection names
+    /// the missing entry. Nothing is known about an instance whose root could
+    /// not be loaded, so it is only reported for bundles without an entry,
+    /// which no other root can accept.
+    fn is_candidate_for(&self, lacks_log_entry: bool) -> bool {
+        match &self.verifier {
+            Ok(verifier) => lacks_log_entry || verifier.requires_log_entry,
+            Err(_) => lacks_log_entry,
+        }
+    }
+
+    fn candidate(&self) -> Candidate<'_> {
+        match &self.verifier {
+            Ok(verifier) => Candidate::Ready(verifier),
+            Err(reason) => Candidate::Unavailable {
+                name: &self.name,
+                reason,
+            },
+        }
+    }
+}
+
+fn github_instance_name(trust_domain: &GitHubTrustDomain) -> String {
+    format!("GitHub instance of {trust_domain}")
+}
+
+/// An instance a bundle is verified against.
+enum Candidate<'a> {
+    Ready(&'a InstanceVerifier),
+    /// A trusted instance whose root could not be loaded.
+    Unavailable {
+        name: &'a str,
+        reason: &'a str,
+    },
+}
+
+impl Candidate<'_> {
+    fn name(&self) -> &str {
+        match self {
+            Self::Ready(instance) => &instance.name,
+            Self::Unavailable { name, .. } => name,
+        }
+    }
+}
+
 /// A verifier for the bundles of one Sigstore instance.
 struct InstanceVerifier {
     instance: SigstoreInstance,
@@ -452,6 +669,9 @@ struct InstanceVerifier {
     name: String,
     /// The trust domain of a GitHub instance.
     github_trust_domain: Option<GitHubTrustDomain>,
+    /// Whether the instance keeps a transparency log, so that its bundles
+    /// carry a log entry.
+    requires_log_entry: bool,
     verifier: Verifier,
     policy: SigstoreVerificationPolicy,
 }
@@ -462,6 +682,7 @@ impl InstanceVerifier {
             instance: SigstoreInstance::PublicGood,
             name: "public-good instance".to_string(),
             github_trust_domain: None,
+            requires_log_entry: true,
             verifier: Verifier::new(trusted_root)
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
             // Publisher policy is applied separately to the verified identities.
@@ -474,7 +695,8 @@ impl InstanceVerifier {
     /// bundles carry no log entry and certificates no SCT; the signing time
     /// is established by the RFC 3161 timestamp instead, which the verifier
     /// requires when there is no log entry. Should a root ever list a log,
-    /// the corresponding check is enforced again.
+    /// the corresponding check is enforced again, and the instance is also
+    /// tried for bundles that carry a log entry.
     fn github(
         trust_domain: &GitHubTrustDomain,
         trusted_root: &TrustedRoot,
@@ -488,8 +710,9 @@ impl InstanceVerifier {
         }
         Ok(Self {
             instance: SigstoreInstance::GitHub,
-            name: format!("GitHub instance of {trust_domain}"),
+            name: github_instance_name(trust_domain),
             github_trust_domain: Some(trust_domain.clone()),
+            requires_log_entry: !trusted_root.tlogs.is_empty(),
             verifier: Verifier::new(trusted_root)
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
             policy,
@@ -702,18 +925,27 @@ pub async fn verify_record(
     .await
 }
 
-/// Like [`verify_record`] but with an explicitly provided trusted root.
+/// Like [`verify_record`] but with an explicitly provided root of the
+/// public-good instance, which is not fetched.
 ///
-/// Only `trusted_root` is trusted, so bundles without a transparency log
-/// entry (attestations of private GitHub repositories) are rejected. Use
-/// [`verify_record_with_trusted_roots`] to also trust GitHub's instance.
+/// As with [`verify_record`], the roots of the GitHub trust domains of
+/// [`VerificationConfig::github_trust_domains`] are fetched when a package
+/// needs them, which by default is github.com's. Use
+/// [`verify_record_with_trusted_roots`] to verify without fetching any root.
 pub async fn verify_record_with_trusted_root(
     policy: &VerificationPolicy,
     record: &RepoDataRecord,
     client: &ClientWithMiddleware,
     trusted_root: &TrustedRoot,
 ) -> SigstoreResult<VerificationOutcome> {
-    verify_record_with_trusted_roots(policy, record, client, TrustedRoots::new(trusted_root)).await
+    verify_record_impl(
+        policy,
+        record,
+        client,
+        TrustedRoots::new(trusted_root),
+        FetchGithubRoot::IfNeeded,
+    )
+    .await
 }
 
 /// Like [`verify_record`] but with explicitly provided trusted roots, without
@@ -751,7 +983,7 @@ async fn verify_record_impl(
     policy: &VerificationPolicy,
     record: &RepoDataRecord,
     client: &ClientWithMiddleware,
-    mut trusted_roots: TrustedRoots<'_>,
+    trusted_roots: TrustedRoots<'_>,
     fetch_github_root: FetchGithubRoot,
 ) -> SigstoreResult<VerificationOutcome> {
     let Some(config) = policy.config() else {
@@ -769,20 +1001,33 @@ async fn verify_record_impl(
         Err(err) => return lenient(policy, err),
     };
 
-    if fetch_github_root == FetchGithubRoot::IfNeeded
-        && sidecar.bundles.iter().any(lacks_transparency_log_entry)
+    let mut outcome = apply_policy(record, &sidecar, config, trusted_roots.clone());
+
+    // Only reach out to GitHub's TUF repository when the roots at hand do not
+    // accept the package. A root that cannot be loaded only affects the
+    // bundles that need it, whose rejection then names the failure.
+    if outcome.is_err()
+        && fetch_github_root == FetchGithubRoot::IfNeeded
+        && !config.github_trust_domains().is_empty()
     {
-        // Only reach out to GitHub's TUF repository when a bundle needs it. A
-        // failure only affects those bundles, which are then rejected.
+        let mut fetched = Vec::new();
+        let mut unavailable = Vec::new();
         for trust_domain in config.github_trust_domains() {
             match github_trusted_root(trust_domain).await {
-                Ok(root) => trusted_roots.github.push((trust_domain.clone(), root)),
-                Err(err) => tracing::warn!("{err}"),
+                Ok(root) => fetched.push((trust_domain.clone(), root)),
+                Err(err) => unavailable.push((trust_domain.clone(), err.to_string())),
             }
         }
+        let mut with_github: TrustedRoots<'_> = trusted_roots;
+        with_github.github.extend(
+            fetched
+                .iter()
+                .map(|(trust_domain, root)| (trust_domain.clone(), root.as_ref())),
+        );
+        with_github.github_unavailable.extend(unavailable);
+        outcome = apply_policy(record, &sidecar, config, with_github);
     }
 
-    let outcome = apply_policy(record, &sidecar, config, trusted_roots);
     match outcome {
         Ok(outcome) => Ok(outcome),
         Err(err) => lenient(policy, err),
@@ -944,6 +1189,133 @@ mod tests {
             let statement = parse_statement(value);
             assert!(validate_statement(&statement, FILENAME).is_err());
         }
+    }
+
+    fn github_root() -> TrustedRoot {
+        TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap()
+    }
+
+    async fn refresh(
+        cached: &mut CachedGitHubRoot,
+        now: Instant,
+        fetches: &mut u32,
+        result: Result<TrustedRoot, String>,
+    ) -> SigstoreResult<Arc<TrustedRoot>> {
+        refresh_github_root(
+            cached,
+            || now,
+            &GitHubTrustDomain::github_com(),
+            || {
+                *fetches += 1;
+                async move { result }
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn a_slow_github_root_fetch_failure_is_remembered_from_when_it_failed() {
+        let mut cached = CachedGitHubRoot::default();
+        let start = Instant::now();
+        // The fetch takes as long as the retry interval to fail.
+        let finished = start + GITHUB_TRUSTED_ROOT_RETRY_AFTER;
+        let now = std::cell::Cell::new(start);
+        let result = refresh_github_root(
+            &mut cached,
+            || now.get(),
+            &GitHubTrustDomain::github_com(),
+            || async {
+                now.set(finished);
+                Err("timed out".to_string())
+            },
+        )
+        .await;
+        assert!(result.is_err());
+
+        // Whoever waited for that fetch does not repeat it.
+        let mut fetches = 0;
+        let result = refresh(&mut cached, finished, &mut fetches, Ok(github_root())).await;
+        assert!(result.is_err());
+        assert_eq!(fetches, 0);
+    }
+
+    #[tokio::test]
+    async fn github_root_is_cached_and_refreshed() {
+        let mut cached = CachedGitHubRoot::default();
+        let mut fetches = 0;
+        let start = Instant::now();
+
+        let first = refresh(&mut cached, start, &mut fetches, Ok(github_root()))
+            .await
+            .unwrap();
+        assert_eq!(fetches, 1);
+
+        // A fresh root is not fetched again.
+        let later = start + GITHUB_TRUSTED_ROOT_TTL - Duration::from_secs(1);
+        let again = refresh(&mut cached, later, &mut fetches, Err("unused".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(fetches, 1);
+        assert!(Arc::ptr_eq(&first, &again));
+
+        // Once it expires it is fetched again, so key rotations are picked up.
+        let expired = start + GITHUB_TRUSTED_ROOT_TTL;
+        let refreshed = refresh(&mut cached, expired, &mut fetches, Ok(github_root()))
+            .await
+            .unwrap();
+        assert_eq!(fetches, 2);
+        assert!(!Arc::ptr_eq(&first, &refreshed));
+
+        // A failed refresh keeps serving the previous root, and is not
+        // repeated right away.
+        let expired = expired + GITHUB_TRUSTED_ROOT_TTL;
+        for _ in 0..2 {
+            let stale = refresh(
+                &mut cached,
+                expired,
+                &mut fetches,
+                Err("offline".to_string()),
+            )
+            .await
+            .unwrap();
+            assert!(Arc::ptr_eq(&refreshed, &stale));
+        }
+        assert_eq!(fetches, 3);
+    }
+
+    #[tokio::test]
+    async fn github_root_fetch_failures_are_cached_briefly() {
+        let mut cached = CachedGitHubRoot::default();
+        let mut fetches = 0;
+        let start = Instant::now();
+
+        for _ in 0..3 {
+            let err = refresh(&mut cached, start, &mut fetches, Err("offline".to_string()))
+                .await
+                .unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "failed to load the Sigstore trusted root: GitHub trust domain github.com: offline"
+            );
+        }
+        assert_eq!(fetches, 1);
+
+        // After the retry interval the fetch is attempted again.
+        let later = start + GITHUB_TRUSTED_ROOT_RETRY_AFTER;
+        refresh(&mut cached, later, &mut fetches, Ok(github_root()))
+            .await
+            .unwrap();
+        assert_eq!(fetches, 2);
+    }
+
+    #[test]
+    fn only_the_github_com_root_is_embedded() {
+        assert!(embedded_github_trusted_root(&GitHubTrustDomain::github_com()).is_ok());
+        let region = GitHubTrustDomain::region("prod-weu-01").unwrap();
+        assert!(matches!(
+            embedded_github_trusted_root(&region),
+            Err(SigstoreError::TrustedRoot(_))
+        ));
     }
 
     #[test]

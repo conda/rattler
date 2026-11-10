@@ -312,7 +312,7 @@ pub struct VerificationConfig {
     channel_check: ChannelCheck,
 
     /// The GitHub trust domains whose trusted roots [`crate::verify_record`]
-    /// loads for bundles without a transparency log entry.
+    /// loads when the public-good root does not accept a package.
     github_trust_domains: Vec<GitHubTrustDomain>,
 }
 
@@ -321,6 +321,11 @@ impl VerificationConfig {
     ///
     /// Use `Publisher::new()` explicitly to accept any cryptographically valid
     /// signer. Different publishers per channel are not supported.
+    ///
+    /// Like `gh attestation verify`, this accepts attestations signed with the
+    /// Sigstore public-good instance and with GitHub's own instance for
+    /// github.com, which signs the attestations of private and internal
+    /// repositories. Change that with [`Self::with_github_trust_domains`].
     pub fn new(publisher: Publisher) -> Self {
         Self {
             publisher,
@@ -348,22 +353,27 @@ impl VerificationConfig {
     }
 
     /// Sets the GitHub trust domains whose attestations
-    /// [`crate::verify_record`] accepts. Defaults to github.com only; pass an
-    /// empty list to only accept attestations signed with the Sigstore
-    /// public-good instance.
+    /// [`crate::verify_record`] accepts in addition to those signed with the
+    /// Sigstore public-good instance. The default is
+    /// [`GitHubTrustDomain::github_com`], like `gh attestation verify`; pass
+    /// an empty list to only accept attestations that are recorded in the
+    /// public transparency log of the public-good instance.
     ///
     /// GitHub signs attestations of private and internal repositories with its
     /// own Sigstore instance, which keeps no public transparency log so that
     /// nothing about the repository is published. Such a bundle carries an
     /// RFC 3161 timestamp from GitHub's timestamp authority instead of a log
     /// entry, so trusting it means trusting GitHub's certificate and timestamp
-    /// authorities without public auditability. Only certificates issued for
+    /// authorities without public auditability. That holds for every
+    /// repository a [`Publisher`] matches, public ones included: a workflow
+    /// can sign with GitHub's instance whatever the visibility of its
+    /// repository. Only certificates issued for
     /// GitHub Actions identities are accepted from these instances; the
     /// [`Publisher`] constraints apply as usual.
     ///
     /// Add the trust domain of a GitHub Enterprise Cloud data residency
     /// region, such as `prod-weu-01`, to accept attestations from its
-    /// `*.ghe.com` tenants. Their identities are issued by
+    /// `*.ghe.com` tenants; regions are never trusted by default. Their identities are issued by
     /// [`Issuer::github_actions_tenant`].
     ///
     /// This only selects which roots [`crate::verify_record`] fetches. The
@@ -533,6 +543,23 @@ mod tests {
         assert!(!github_com.issues_for(&tenant));
         assert!(region.issues_for(&tenant));
         assert!(!region.issues_for(&GitHubActionsIssuer::GitHubCom));
+    }
+
+    #[test]
+    fn only_github_com_is_trusted_by_default() {
+        let config = VerificationConfig::new(Publisher::new());
+        assert_eq!(
+            config.github_trust_domains(),
+            [GitHubTrustDomain::github_com()]
+        );
+
+        // The list is replaced, not extended: regions have to be named, and
+        // an empty list leaves only the public-good instance.
+        let region = GitHubTrustDomain::region("prod-weu-01").unwrap();
+        let config = config.with_github_trust_domains([region.clone()]);
+        assert_eq!(config.github_trust_domains(), [region]);
+        let config = config.with_github_trust_domains([]);
+        assert!(config.github_trust_domains().is_empty());
     }
 
     #[test]

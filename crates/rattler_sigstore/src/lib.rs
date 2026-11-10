@@ -63,8 +63,8 @@ pub use sigstore_verify::crypto::{CertificateInfo, FulcioCiClaims};
 pub use sigstore_verify::trust_root::{SigstoreInstance, TrustedRoot};
 pub use verify::{
     BundleVerification, CONDA_PUBLISH_PREDICATE_TYPE, CondaPublishPredicate, RejectedAttestation,
-    TrustedRoots, VerificationOutcome, VerifiedAttestation, VerifiedChecks, embedded_trusted_root,
-    github_trusted_root, production_trusted_root, verify_bundles,
-    verify_bundles_with_trusted_roots, verify_record, verify_record_with_trusted_root,
-    verify_record_with_trusted_roots,
+    TrustedRoots, VerificationOutcome, VerifiedAttestation, VerifiedChecks,
+    embedded_github_trusted_root, embedded_trusted_root, github_trusted_root,
+    production_trusted_root, verify_bundles, verify_bundles_with_trusted_roots, verify_record,
+    verify_record_with_trusted_root, verify_record_with_trusted_roots,
 };

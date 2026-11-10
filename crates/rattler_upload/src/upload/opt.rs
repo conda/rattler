@@ -328,13 +328,12 @@ pub struct PrefixOpts {
     /// commit in a public transparency log, which reveals the name of a
     /// private repository. `auto` therefore uses GitHub's instance, which
     /// keeps no public log, for private and internal GitHub repositories.
-    #[arg(
-        long,
-        value_enum,
-        default_value_t,
-        env = "RATTLER_SIGSTORE_INSTANCE",
-        requires = "generate_attestation"
-    )]
+    ///
+    /// Only used with `--generate-attestation`.
+    // No `requires = "generate_attestation"`: clap also applies it to a value
+    // from the environment, which would fail every upload without
+    // `--generate-attestation` while the variable is set.
+    #[arg(long, value_enum, default_value_t, env = "RATTLER_SIGSTORE_INSTANCE")]
     pub sigstore_instance: SigstoreInstanceChoice,
 
     /// Skip upload if package already exists.
@@ -348,6 +347,7 @@ pub struct PrefixOpts {
 
 #[derive(Debug)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub struct PrefixData {
     pub url: UrlWithTrailingSlash,
     pub channel: String,
@@ -669,5 +669,41 @@ impl CondaForgeData {
             provider,
             dry_run,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    /// `--sigstore-instance` can also come from `RATTLER_SIGSTORE_INSTANCE`,
+    /// which a CI job may set for every step, so it must not demand
+    /// `--generate-attestation`.
+    #[test]
+    fn sigstore_instance_does_not_require_generate_attestation() {
+        let opts = PrefixOpts::try_parse_from([
+            "prefix",
+            "--channel",
+            "my-channel",
+            "--sigstore-instance",
+            "github",
+        ])
+        .unwrap();
+        assert_eq!(opts.sigstore_instance, SigstoreInstanceChoice::Github);
+        assert!(!opts.generate_attestation);
+
+        let opts = PrefixOpts::try_parse_from([
+            "prefix",
+            "--channel",
+            "my-channel",
+            "--attestation",
+            "attestation.json",
+            "--sigstore-instance",
+            "public-good",
+        ])
+        .unwrap();
+        assert!(opts.attestation.is_some());
     }
 }
