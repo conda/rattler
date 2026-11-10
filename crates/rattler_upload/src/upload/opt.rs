@@ -390,6 +390,10 @@ pub struct AnacondaOpts {
     /// Replace files on conflict
     #[arg(long, short, env = "ANACONDA_FORCE")]
     pub force: bool,
+
+    /// Skip upload if package already exists
+    #[arg(short, long, alias = "skip-if-exists", env = "ANACONDA_SKIP_EXISTING")]
+    pub skip_existing: bool,
 }
 
 #[cfg(feature = "s3")]
@@ -438,6 +442,7 @@ pub struct AnacondaData {
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
     pub force: ForceOverwrite,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<AnacondaOpts> for AnacondaData {
@@ -449,6 +454,7 @@ impl From<AnacondaOpts> for AnacondaData {
             value.url,
             value.force.into(),
         )
+        .with_skip_existing(value.skip_existing.into())
     }
 }
 
@@ -469,7 +475,14 @@ impl AnacondaData {
                 .unwrap_or_else(|| Url::parse("https://api.anaconda.org").unwrap())
                 .into(),
             force,
+            skip_existing: SkipExisting(false),
         }
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
+        self
     }
 }
 

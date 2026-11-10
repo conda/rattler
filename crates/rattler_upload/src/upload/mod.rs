@@ -265,6 +265,7 @@ pub async fn upload_package_to_anaconda(
                     &anaconda_data.owner,
                     &anaconda_data.channels,
                     anaconda_data.force,
+                    anaconda_data.skip_existing,
                     &package,
                 )
                 .await?;
@@ -883,5 +884,65 @@ mod test {
         ])
         .unwrap();
         assert!(!opts_default.force);
+    }
+
+    #[test]
+    fn test_anaconda_opts_skip_existing() {
+        use crate::upload::opt::{AnacondaData, AnacondaOpts};
+        use clap::Parser;
+
+        let opts_default =
+            AnacondaOpts::try_parse_from(["anaconda", "--owner", "test-owner"]).unwrap();
+        assert!(!opts_default.skip_existing);
+
+        let opts_skip =
+            AnacondaOpts::try_parse_from(["anaconda", "--owner", "test-owner", "--skip-existing"])
+                .unwrap();
+        assert!(opts_skip.skip_existing);
+        let data_skip: AnacondaData = opts_skip.into();
+        assert!(data_skip.skip_existing.is_enabled());
+
+        let opts_skip_alias =
+            AnacondaOpts::try_parse_from(["anaconda", "--owner", "test-owner", "--skip-if-exists"])
+                .unwrap();
+        assert!(opts_skip_alias.skip_existing);
+
+        let opts_skip_short =
+            AnacondaOpts::try_parse_from(["anaconda", "--owner", "test-owner", "-s"]).unwrap();
+        assert!(opts_skip_short.skip_existing);
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_upload_skip_existing() {
+        use crate::upload::opt::{AnacondaData, ForceOverwrite, SkipExisting};
+        use axum::routing::{get, post};
+
+        let router = Router::new()
+            .route(
+                "/package/{owner}/{name}",
+                get(|| async { StatusCode::OK }).patch(|| async { StatusCode::OK }),
+            )
+            .route(
+                "/release/{owner}/{name}/{version}",
+                get(|| async { StatusCode::OK }).patch(|| async { StatusCode::OK }),
+            )
+            .route(
+                "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
+                post(|| async { StatusCode::CONFLICT }),
+            );
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let anaconda_data = AnacondaData::new(
+            "test-owner".to_string(),
+            Some(vec!["main".to_string()]),
+            Some("test-token".to_string()),
+            Some(url),
+            ForceOverwrite(false),
+        )
+        .with_skip_existing(SkipExisting(true));
+
+        let package_files = vec![test_package_path()];
+        let result = upload_package_to_anaconda(&storage, &package_files, anaconda_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
     }
 }

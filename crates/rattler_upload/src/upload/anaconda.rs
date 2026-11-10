@@ -13,7 +13,7 @@ use tracing::debug;
 use tracing::info;
 use url::Url;
 
-use crate::upload::opt::ForceOverwrite;
+use crate::upload::opt::{ForceOverwrite, SkipExisting};
 
 use super::package::ExtractedPackage;
 use crate::tool_configuration::APP_USER_AGENT;
@@ -57,7 +57,7 @@ pub enum AnacondaError {
 
     /// The file already exists and --force was not specified.
     #[error("file {0} already exists")]
-    #[diagnostic(help("use --force to overwrite"))]
+    #[diagnostic(help("use --force to overwrite or --skip-existing to skip"))]
     FileAlreadyExists(String),
 
     /// Failed to stage a file on the server.
@@ -357,6 +357,7 @@ impl Anaconda {
         owner: &str,
         channels: &[String],
         force: ForceOverwrite,
+        skip_existing: SkipExisting,
         package: &ExtractedPackage<'_>,
     ) -> Result<bool, AnacondaError> {
         if channels.is_empty() {
@@ -417,7 +418,10 @@ impl Anaconda {
         match resp.status() {
             reqwest::StatusCode::OK => (),
             reqwest::StatusCode::CONFLICT => {
-                if force.is_enabled() {
+                if skip_existing.is_enabled() {
+                    info!("Skip existing package: {}", filename);
+                    return Ok(true);
+                } else if force.is_enabled() {
                     info!(
                         "file {} already exists, running with --force, removing file and retrying",
                         filename
@@ -517,7 +521,10 @@ mod test {
     use super::{Anaconda, AnacondaError};
     use crate::upload::package::ExtractedPackage;
     use crate::upload::test_utils::test_package_path;
-    use crate::upload::{opt::ForceOverwrite, test_utils};
+    use crate::upload::{
+        opt::{ForceOverwrite, SkipExisting},
+        test_utils,
+    };
 
     #[tokio::test]
     async fn test_anaconda_create_package() {
@@ -594,6 +601,7 @@ mod test {
                 "test-owner",
                 &["main".to_string()],
                 ForceOverwrite(false),
+                SkipExisting(false),
                 &package,
             )
             .await
@@ -613,7 +621,13 @@ mod test {
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let err = anaconda
-            .upload_file("test-owner", &[], ForceOverwrite(false), &package)
+            .upload_file(
+                "test-owner",
+                &[],
+                ForceOverwrite(false),
+                SkipExisting(false),
+                &package,
+            )
             .await
             .unwrap_err();
         assert!(
@@ -695,10 +709,67 @@ mod test {
                 "test-owner",
                 &["main".to_string()],
                 ForceOverwrite(false),
+                SkipExisting(false),
                 &package,
             )
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
         assert!(result.unwrap(), "upload_file should return true on success");
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_upload_file_conflict_with_skip_existing() {
+        let router = Router::new().route(
+            "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
+            post(|| async { StatusCode::CONFLICT }),
+        );
+        let url = test_utils::start_test_server(router).await;
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let result = anaconda
+            .upload_file(
+                "test-owner",
+                &["main".to_string()],
+                ForceOverwrite(false),
+                SkipExisting(true),
+                &package,
+            )
+            .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert!(
+            result.unwrap(),
+            "upload_file should return true when skipped"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_upload_file_conflict_without_force_or_skip() {
+        let router = Router::new().route(
+            "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
+            post(|| async { StatusCode::CONFLICT }),
+        );
+        let url = test_utils::start_test_server(router).await;
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let result = anaconda
+            .upload_file(
+                "test-owner",
+                &["main".to_string()],
+                ForceOverwrite(false),
+                SkipExisting(false),
+                &package,
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(
+            matches!(result.unwrap_err(), AnacondaError::FileAlreadyExists(_)),
+            "expected FileAlreadyExists error"
+        );
     }
 }
