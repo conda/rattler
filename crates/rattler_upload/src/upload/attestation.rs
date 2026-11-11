@@ -103,10 +103,21 @@ fn resolve_instance(
         .as_ref()
         .and_then(|claims| GitHubActionsIssuer::parse(&claims.iss));
     match (choice, github) {
-        // GitHub's instance only accepts GitHub Actions tokens.
-        (SigstoreInstanceChoice::PublicGood, _) | (SigstoreInstanceChoice::Auto, None) => {
+        (SigstoreInstanceChoice::PublicGood, github) => {
+            let visibility = claims.and_then(|claims| claims.repository_visibility);
+            if github.is_some() && visibility.as_deref() != Some("public") {
+                tracing::warn!(
+                    "Signing with the Sigstore public-good instance records the repository, \
+                     workflow and commit of this {} repository in the public Rekor transparency \
+                     log. Use `--sigstore-instance auto` to sign with GitHub's instance instead, \
+                     which keeps no public log.",
+                    visibility.as_deref().unwrap_or("possibly private")
+                );
+            }
             Ok(ResolvedInstance::PublicGood)
         }
+        // GitHub's instance only accepts GitHub Actions tokens.
+        (SigstoreInstanceChoice::Auto, None) => Ok(ResolvedInstance::PublicGood),
         (SigstoreInstanceChoice::Github, Some(github)) => Ok(ResolvedInstance::GitHub(github)),
         (SigstoreInstanceChoice::Github, None) => Err(miette::miette!(
             "GitHub's Sigstore instance only accepts GitHub Actions identity tokens, \

@@ -58,11 +58,11 @@ pub enum SigstoreInstanceChoice {
     /// GitHub's instance for private and internal GitHub repositories (as
     /// reported by the GitHub Actions identity token), the public-good
     /// instance otherwise. This matches what `actions/attest` does.
-    #[default]
     Auto,
     /// The Sigstore public-good instance. The signature, including the
     /// repository, workflow and commit of the signer, is recorded in the
     /// public Rekor transparency log.
+    #[default]
     PublicGood,
     /// GitHub's artifact attestation instance. Nothing is published to a
     /// transparency log; the bundle carries a timestamp from GitHub's
@@ -326,8 +326,10 @@ pub struct PrefixOpts {
     ///
     /// The public-good instance records the signer's repository, workflow and
     /// commit in a public transparency log, which reveals the name of a
-    /// private repository. `auto` therefore uses GitHub's instance, which
-    /// keeps no public log, for private and internal GitHub repositories.
+    /// private repository. `auto` instead uses GitHub's instance, which keeps
+    /// no public log, for private and internal GitHub repositories; the
+    /// server and everyone verifying the package then have to trust GitHub's
+    /// instance.
     ///
     /// Only used with `--generate-attestation`.
     // No `requires = "generate_attestation"`: clap also applies it to a value
@@ -677,6 +679,14 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    /// Signing with GitHub's instance is opt-in: its bundles carry no
+    /// transparency log entry, which the receiving server has to accept.
+    #[test]
+    fn the_public_good_instance_is_the_default() {
+        let opts = PrefixOpts::try_parse_from(["prefix", "--channel", "my-channel"]).unwrap();
+        assert_eq!(opts.sigstore_instance, SigstoreInstanceChoice::PublicGood);
+    }
 
     /// `--sigstore-instance` can also come from `RATTLER_SIGSTORE_INSTANCE`,
     /// which a CI job may set for every step, so it must not demand
