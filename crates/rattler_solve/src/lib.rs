@@ -21,6 +21,7 @@ use std::sync::{
 use jiff::Timestamp;
 use rattler_conda_types::{
     Flag, GenericVirtualPackage, MatchSpec, Matches, PackageName, RepoDataRecord, SolverResult,
+    StringMatcher,
 };
 use url::Url;
 
@@ -678,6 +679,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     ///
     /// Earlier preferences take precedence over later ones.
     ///
+    /// Like any other ordering criterion, a preference does not replace a
+    /// package from [`Self::locked_packages`]: a locked variant stays
+    /// favored until something else forces the solver to move away from it.
+    /// To apply a new preference to an existing environment, leave the
+    /// affected packages out of the locked packages.
+    ///
     /// Only the `resolvo` backend supports this. Other backends reject a task
     /// that sets it rather than silently solving without the preference.
     pub flag_preferences: Vec<FlagPreference>,
@@ -735,25 +742,31 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<ChannelRepoDat
 
 /// A soft preference for or against package variants that carry a flag.
 ///
+/// Flags are matched like the `[flags=[...]]` key of a match spec, so a
+/// preference can name a flag exactly (`debug`, `blas:mkl`) or use a glob
+/// (`cuda:*` for any `cuda` flag value).
+///
 /// See [`SolverTask::flag_preferences`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum FlagPreference {
-    /// Prefer variants that carry the flag.
-    Prefer(Flag),
+    /// Prefer variants that carry a flag matching the matcher.
+    Prefer(StringMatcher),
 
-    /// Prefer variants that do not carry the flag.
-    Avoid(Flag),
+    /// Prefer variants that carry no flag matching the matcher.
+    Avoid(StringMatcher),
 }
 
 impl FlagPreference {
     /// Returns whether a variant with the given flags satisfies this
     /// preference.
     pub fn is_satisfied_by(&self, flags: &[Flag]) -> bool {
+        let any_match =
+            |matcher: &StringMatcher| flags.iter().any(|flag| matcher.matches(flag.as_str()));
         match self {
-            FlagPreference::Prefer(flag) => flags.contains(flag),
-            FlagPreference::Avoid(flag) => !flags.contains(flag),
+            FlagPreference::Prefer(matcher) => any_match(matcher),
+            FlagPreference::Avoid(matcher) => !any_match(matcher),
         }
     }
 }
