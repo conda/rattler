@@ -35,10 +35,19 @@ pub struct RunExportsJson {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub strong_constrains: Vec<String>,
     /// flags that are added to the flags of any package that has this
-    /// package as a direct build or host dependency. For example, a debug
-    /// compiler can export a `debug` flag.
+    /// package as a direct `build` dependency. For example, a debug compiler
+    /// can export a `debug` flag to everything that is compiled with it.
+    ///
+    /// Unlike `strong` run exports, this does not imply
+    /// [`Self::flags_from_host`]: the two lists are independent, and a
+    /// package that exports a flag from both environments lists it in both.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub flags: Vec<Flag>,
+    pub flags_from_build: Vec<Flag>,
+    /// flags that are added to the flags of any package that has this
+    /// package as a direct `host` dependency. For example, a debug build of a
+    /// library can export a `debug` flag to everything that links against it.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub flags_from_host: Vec<Flag>,
 }
 
 impl PackageFile for RunExportsJson {
@@ -68,7 +77,8 @@ impl RunExportsJson {
             && self.noarch.is_empty()
             && self.weak_constrains.is_empty()
             && self.strong_constrains.is_empty()
-            && self.flags.is_empty()
+            && self.flags_from_build.is_empty()
+            && self.flags_from_host.is_empty()
     }
 }
 
@@ -102,19 +112,29 @@ mod flags_test {
 
     #[test]
     fn flags_round_trip() {
-        let run_exports =
-            RunExportsJson::from_str(r#"{"strong": ["libgcc >=15"], "flags": ["debug"]}"#).unwrap();
-        assert_eq!(run_exports.flags.len(), 1);
-        assert_eq!(run_exports.flags[0].as_str(), "debug");
+        let json = r#"{"strong":["libgcc >=15"],"flags_from_build":["debug"],"flags_from_host":["asan","debug"]}"#;
+        let run_exports = RunExportsJson::from_str(json).unwrap();
+        let flags =
+            |flags: &[crate::Flag]| flags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(flags(&run_exports.flags_from_build), ["debug"]);
+        assert_eq!(flags(&run_exports.flags_from_host), ["asan", "debug"]);
         assert!(!run_exports.is_empty());
-        assert_eq!(
-            serde_json::to_string(&run_exports).unwrap(),
-            r#"{"strong":["libgcc >=15"],"flags":["debug"]}"#
-        );
+        assert_eq!(serde_json::to_string(&run_exports).unwrap(), json);
 
-        // Files without flags don't serialize the key.
+        // Each list makes the run exports non-empty on its own.
+        for json in [
+            r#"{"flags_from_build":["debug"]}"#,
+            r#"{"flags_from_host":["debug"]}"#,
+        ] {
+            let run_exports = RunExportsJson::from_str(json).unwrap();
+            assert!(!run_exports.is_empty());
+            assert_eq!(serde_json::to_string(&run_exports).unwrap(), json);
+        }
+
+        // Files without flags don't serialize the keys.
         let run_exports = RunExportsJson::from_str(r#"{"weak": ["zlib"]}"#).unwrap();
-        assert!(run_exports.flags.is_empty());
+        assert!(run_exports.flags_from_build.is_empty());
+        assert!(run_exports.flags_from_host.is_empty());
         assert_eq!(
             serde_json::to_string(&run_exports).unwrap(),
             r#"{"weak":["zlib"]}"#

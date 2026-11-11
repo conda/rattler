@@ -7,7 +7,7 @@ use console::style;
 use indicatif::HumanBytes;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    NoArchType,
+    Flag, NoArchType,
     package::{IndexJson, PathsEntry, PathsJson, RunExportsJson},
 };
 use rattler_package_streaming::{
@@ -355,14 +355,26 @@ fn compare_dependencies(
             right_specs,
         );
     }
-    let flag_strings = |run_exports: &RunExportsJson| -> Vec<String> {
-        run_exports.flags.iter().map(ToString::to_string).collect()
-    };
-    any_changes |= print_spec_diff(
-        "run_exports (flags)",
-        &flag_strings(left_run_exports),
-        &flag_strings(right_run_exports),
-    );
+    for (category, left_flags, right_flags) in [
+        (
+            "flags_from_build",
+            &left_run_exports.flags_from_build,
+            &right_run_exports.flags_from_build,
+        ),
+        (
+            "flags_from_host",
+            &left_run_exports.flags_from_host,
+            &right_run_exports.flags_from_host,
+        ),
+    ] {
+        let to_strings =
+            |flags: &[Flag]| -> Vec<String> { flags.iter().map(ToString::to_string).collect() };
+        any_changes |= print_spec_diff(
+            &format!("run_exports ({category})"),
+            &to_strings(left_flags),
+            &to_strings(right_flags),
+        );
+    }
 
     if !any_changes {
         println!("  no changes");

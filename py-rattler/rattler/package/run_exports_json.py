@@ -25,7 +25,8 @@ class RunExportsJson:
         noarch: list[str] | None = None,
         weak_constrains: list[str] | None = None,
         strong_constrains: list[str] | None = None,
-        flags: list[str] | None = None,
+        flags_from_build: list[str] | None = None,
+        flags_from_host: list[str] | None = None,
     ) -> None:
         """
         Create a new RunExportsJson instance.
@@ -42,8 +43,10 @@ class RunExportsJson:
             Weak constrains apply a constrain dependency from host to build, or run to host
         strong_constrains : List[str] | None, optional
             Strong constrains apply a constrain dependency from build to host and run
-        flags : List[str] | None, optional
-            Flags added to any package that has this package as a direct build or host dependency
+        flags_from_build : List[str] | None, optional
+            Flags added to any package that has this package as a direct build dependency
+        flags_from_host : List[str] | None, optional
+            Flags added to any package that has this package as a direct host dependency
 
         Examples
         --------
@@ -54,10 +57,11 @@ class RunExportsJson:
         ...     noarch=["noarch_dep 3.0"],
         ...     weak_constrains=["weak_constrain 4.0"],
         ...     strong_constrains=["strong_constrain 5.0"],
-        ...     flags=["debug"],
+        ...     flags_from_build=["debug"],
+        ...     flags_from_host=["asan"],
         ... )
         >>> run_exports
-        RunExportsJson(weak=['weak_dep 1.0'], strong=['strong_dep 2.0'], noarch=['noarch_dep 3.0'], weak_constrains=['weak_constrain 4.0'], strong_constrains=['strong_constrain 5.0'], flags=['debug'])
+        RunExportsJson(weak=['weak_dep 1.0'], strong=['strong_dep 2.0'], noarch=['noarch_dep 3.0'], weak_constrains=['weak_constrain 4.0'], strong_constrains=['strong_constrain 5.0'], flags_from_build=['debug'], flags_from_host=['asan'])
         >>>
         ```
         """
@@ -67,7 +71,8 @@ class RunExportsJson:
             noarch or [],
             weak_constrains or [],
             strong_constrains or [],
-            flags or [],
+            flags_from_build or [],
+            flags_from_host or [],
         )
 
     @staticmethod
@@ -98,7 +103,7 @@ class RunExportsJson:
         ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports
-        RunExportsJson(weak=['python_abi 3.10.* *_cp310'], strong=[], noarch=['python'], weak_constrains=[], strong_constrains=[], flags=[])
+        RunExportsJson(weak=['python_abi 3.10.* *_cp310'], strong=[], noarch=['python'], weak_constrains=[], strong_constrains=[], flags_from_build=[], flags_from_host=[])
         >>>
         ```
         """
@@ -278,28 +283,58 @@ class RunExportsJson:
         self._inner.strong_constrains = value
 
     @property
-    def flags(self) -> list[str]:
+    def flags_from_build(self) -> list[str]:
         """
         Flags added to the flags of any package that has this package as a
-        direct build or host dependency, e.g. `debug` for a debug compiler.
+        direct build dependency, e.g. `debug` for a debug compiler.
+
+        This is independent of `flags_from_host`: a package that exports a
+        flag from both environments lists it in both.
 
         Examples
         --------
         ```python
         >>> run_exports = RunExportsJson()
-        >>> run_exports.flags
+        >>> run_exports.flags_from_build
         []
-        >>> run_exports.flags = ["debug"]
-        >>> run_exports.flags
+        >>> run_exports.flags_from_build = ["debug"]
+        >>> run_exports.flags_from_build
+        ['debug']
+        >>> run_exports.flags_from_build = ["Not A Flag"]
+        Traceback (most recent call last):
+        ValueError: 'Not A Flag' is not a valid flag. Flags must match ^[a-z0-9_]+(:[a-z0-9_]+)?$
+        >>>
+        ```
+        """
+        return self._inner.flags_from_build
+
+    @flags_from_build.setter
+    def flags_from_build(self, value: list[str]) -> None:
+        self._inner.flags_from_build = value
+
+    @property
+    def flags_from_host(self) -> list[str]:
+        """
+        Flags added to the flags of any package that has this package as a
+        direct host dependency, e.g. `debug` for a debug build of a library.
+
+        Examples
+        --------
+        ```python
+        >>> run_exports = RunExportsJson()
+        >>> run_exports.flags_from_host
+        []
+        >>> run_exports.flags_from_host = ["debug"]
+        >>> run_exports.flags_from_host
         ['debug']
         >>>
         ```
         """
-        return self._inner.flags
+        return self._inner.flags_from_host
 
-    @flags.setter
-    def flags(self, value: list[str]) -> None:
-        self._inner.flags = value
+    @flags_from_host.setter
+    def flags_from_host(self, value: list[str]) -> None:
+        self._inner.flags_from_host = value
 
     @classmethod
     def _from_py_run_exports_json(cls, py_run_exports_json: PyRunExportsJson) -> RunExportsJson:
@@ -312,7 +347,7 @@ class RunExportsJson:
         """
         Returns a representation of the RunExportsJson.
         """
-        return f"RunExportsJson(weak={self.weak}, strong={self.strong}, noarch={self.noarch}, weak_constrains={self.weak_constrains}, strong_constrains={self.strong_constrains}, flags={self.flags})"
+        return f"RunExportsJson(weak={self.weak}, strong={self.strong}, noarch={self.noarch}, weak_constrains={self.weak_constrains}, strong_constrains={self.strong_constrains}, flags_from_build={self.flags_from_build}, flags_from_host={self.flags_from_host})"
 
     def is_empty(self) -> bool:
         """

@@ -38,24 +38,26 @@ impl From<PyRunExportsJson> for RunExportsJson {
 impl PyRunExportsJson {
     /// Constructor
     #[new]
-    #[pyo3(signature = (weak, strong, noarch, weak_constrains, strong_constrains, flags=Vec::new()))]
+    #[pyo3(signature = (weak, strong, noarch, weak_constrains, strong_constrains, flags_from_build=Vec::new(), flags_from_host=Vec::new()))]
     pub fn new(
         weak: Vec<String>,
         strong: Vec<String>,
         noarch: Vec<String>,
         weak_constrains: Vec<String>,
         strong_constrains: Vec<String>,
-        flags: Vec<String>,
-    ) -> Self {
+        flags_from_build: Vec<String>,
+        flags_from_host: Vec<String>,
+    ) -> PyResult<Self> {
         let inner = RunExportsJson {
             weak,
             strong,
             noarch,
             weak_constrains,
             strong_constrains,
-            flags: flags.into_iter().map(Flag::new_unchecked).collect(),
+            flags_from_build: parse_flags(flags_from_build)?,
+            flags_from_host: parse_flags(flags_from_host)?,
         };
-        Self { inner }
+        Ok(Self { inner })
     }
 
     /// Parses the package file from archive.
@@ -215,16 +217,44 @@ impl PyRunExportsJson {
         })
     }
 
-    /// Flags added to any package that has this package as a direct build or
-    /// host dependency.
+    /// Flags added to any package that has this package as a direct build
+    /// dependency.
     #[getter]
-    pub fn flags(&self) -> Vec<String> {
-        self.inner.flags.iter().map(ToString::to_string).collect()
+    pub fn flags_from_build(&self) -> Vec<String> {
+        flags_to_strings(&self.inner.flags_from_build)
     }
 
-    /// Set flags
+    /// Set the flags exported from the build environment
     #[setter]
-    pub fn set_flags(&mut self, flags: Vec<String>) {
-        self.inner.flags = flags.into_iter().map(Flag::new_unchecked).collect();
+    pub fn set_flags_from_build(&mut self, flags: Vec<String>) -> PyResult<()> {
+        self.inner.flags_from_build = parse_flags(flags)?;
+        Ok(())
     }
+
+    /// Flags added to any package that has this package as a direct host
+    /// dependency.
+    #[getter]
+    pub fn flags_from_host(&self) -> Vec<String> {
+        flags_to_strings(&self.inner.flags_from_host)
+    }
+
+    /// Set the flags exported from the host environment
+    #[setter]
+    pub fn set_flags_from_host(&mut self, flags: Vec<String>) -> PyResult<()> {
+        self.inner.flags_from_host = parse_flags(flags)?;
+        Ok(())
+    }
+}
+
+/// Validates user provided flags, so that invalid flags are rejected instead
+/// of being written to `run_exports.json`.
+fn parse_flags(flags: Vec<String>) -> PyResult<Vec<Flag>> {
+    flags
+        .into_iter()
+        .map(|flag| Flag::try_from(flag).map_err(|e| PyValueError::new_err(e.to_string())))
+        .collect()
+}
+
+fn flags_to_strings(flags: &[Flag]) -> Vec<String> {
+    flags.iter().map(ToString::to_string).collect()
 }
