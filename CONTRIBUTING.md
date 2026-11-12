@@ -7,6 +7,18 @@ Before starting work, agree on the proposed change with a maintainer on an issue
 For questions, requests or a casual chat, we are very active on our discord server.
 You can [join our discord server via this link](https://discord.gg/kKV8ZxyzY4).
 
+## The Golden Rule
+
+**When opening issues, PRs, or discussions, include a human-written description at the start.**
+
+This helps us understand the context in which the communication is taking place. It can be very brief if there isn't much context to explain.
+
+*You can include AI-generated text afterwards, but make sure it is clearly indicated as separate from your prose.*
+
+Please also follow this rule when responding to comments from other humans, keeping your thoughts separate from the outputs of any prompts.
+
+See also our [AI usage policy](AI_POLICY.md).
+
 ## Pull Request Prerequisite: Vouching
 
 We use a vouch system to mitigate spam. Before opening a pull request:
