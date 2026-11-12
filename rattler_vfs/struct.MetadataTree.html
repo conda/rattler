@@ -6,10 +6,10 @@ not stable and is intentionally not exposed. The newtype wrapper means
 downstream consumers cannot construct one directly — guaranteeing every
 mount went through <a href="struct.MetadataTree.html#method.build" title="associated function rattler_vfs::MetadataTree::build"><code>MetadataTree::build</code></a>’s validation.</p>
 </div></details><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-MetadataTree" class="impl"><a class="src rightside" href="../src/rattler_vfs/lib.rs.html#519-574">Source</a><a href="#impl-MetadataTree" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.MetadataTree.html" title="struct rattler_vfs::MetadataTree">MetadataTree</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.build" class="method"><a class="src rightside" href="../src/rattler_vfs/lib.rs.html#533-549">Source</a><h4 class="code-header">pub async fn <a href="#method.build" class="fn">build</a>(
-    lockfile: &amp;<a class="struct" href="../rattler_lock/struct.LockFile.html" title="struct rattler_lock::LockFile">LockFile</a>,
+    lockfile: &amp;LockFile,
     environment_name: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.str.html">str</a>,
-    platform: <a class="enum" href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
-    package_cache: &amp;<a class="struct" href="../rattler_cache/package_cache/struct.PackageCache.html" title="struct rattler_cache::package_cache::PackageCache">PackageCache</a>,
+    platform: Subdir,
+    package_cache: &amp;PackageCache,
     mount_point: &amp;<a class="struct" href="https://doc.rust-lang.org/1.99.0/std/path/struct.Path.html" title="struct std::path::Path">Path</a>,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.104/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Build the in-memory metadata tree from a parsed lock file.</p>
 <p>Fetches packages from <code>package_cache</code> as needed, reads <code>PathsJson</code> for
@@ -17,19 +17,19 @@ each, and constructs the virtual directory tree with noarch Python path
 rewriting and entry-point generation.</p>
 <p>Caller responsibilities:</p>
 <ul>
-<li>Parse the lock file once via <a href="../rattler_lock/struct.LockFile.html#method.from_path" title="associated function rattler_lock::LockFile::from_path"><code>LockFile::from_path</code></a>.</li>
-<li>Pick a <a href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir"><code>Subdir</code></a> (usually <a href="../rattler_conda_types/subdir/enum.Subdir.html#method.current" title="associated function rattler_conda_types::subdir::Subdir::current"><code>Subdir::current()</code></a>).</li>
-<li>Construct a <a href="../rattler_cache/package_cache/struct.PackageCache.html" title="struct rattler_cache::package_cache::PackageCache"><code>PackageCache</code></a> (commonly via
-<a href="../rattler_cache/fn.default_cache_dir.html" title="fn rattler_cache::default_cache_dir"><code>rattler_cache::default_cache_dir()</code></a>). Decoupling the cache from
+<li>Parse the lock file once via [<code>LockFile::from_path</code>].</li>
+<li>Pick a [<code>Subdir</code>] (usually [<code>Subdir::current()</code>]).</li>
+<li>Construct a [<code>PackageCache</code>] (commonly via
+[<code>rattler_cache::default_cache_dir()</code>]). Decoupling the cache from
 this function lets pixi share its own cache and lets tests use a temp
 dir.</li>
 </ul>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.build_with_client" class="method"><a class="src rightside" href="../src/rattler_vfs/lib.rs.html#556-573">Source</a><h4 class="code-header">pub async fn <a href="#method.build_with_client" class="fn">build_with_client</a>(
-    lockfile: &amp;<a class="struct" href="../rattler_lock/struct.LockFile.html" title="struct rattler_lock::LockFile">LockFile</a>,
+    lockfile: &amp;LockFile,
     environment_name: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.str.html">str</a>,
-    platform: <a class="enum" href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
-    package_cache: &amp;<a class="struct" href="../rattler_cache/package_cache/struct.PackageCache.html" title="struct rattler_cache::package_cache::PackageCache">PackageCache</a>,
-    client: impl <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="../rattler_networking/lazy_client/struct.LazyClient.html" title="struct rattler_networking::lazy_client::LazyClient">LazyClient</a>&gt;,
+    platform: Subdir,
+    package_cache: &amp;PackageCache,
+    client: impl <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;LazyClient&gt;,
     mount_point: &amp;<a class="struct" href="https://doc.rust-lang.org/1.99.0/std/path/struct.Path.html" title="struct std::path::Path">Path</a>,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.104/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Like <a href="struct.MetadataTree.html#method.build" title="associated function rattler_vfs::MetadataTree::build"><code>MetadataTree::build</code></a>, but downloads missing packages with
 <code>client</code> instead of a default client without authentication, mirrors
