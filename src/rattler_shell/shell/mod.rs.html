@@ -1032,7 +1032,7 @@
 <a href=#1030 id=1030 data-nosnippet>1030</a>    </span><span class="kw">pub fn </span>from_parent_process() -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
 <a href=#1031 id=1031 data-nosnippet>1031</a>        <span class="kw">use </span>sysinfo::get_current_pid;
 <a href=#1032 id=1032 data-nosnippet>1032</a>
-<a href=#1033 id=1033 data-nosnippet>1033</a>        <span class="kw">let </span><span class="kw-2">mut </span>system_info = sysinfo::System::new();
+<a href=#1033 id=1033 data-nosnippet>1033</a>        <span class="kw">let </span><span class="kw-2">mut </span>system_info = sysinfo::System::new().ok()<span class="question-mark">?</span>;
 <a href=#1034 id=1034 data-nosnippet>1034</a>
 <a href=#1035 id=1035 data-nosnippet>1035</a>        <span class="comment">// Get current process information
 <a href=#1036 id=1036 data-nosnippet>1036</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>current_pid = get_current_pid().ok()<span class="question-mark">?</span>;
