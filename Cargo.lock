@@ -5551,6 +5551,8 @@ version = "0.34.7"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral_async_zip",
+ "axum",
  "bytes",
  "clap",
  "clap-verbosity-flag",
@@ -5583,6 +5585,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "zip",
  "zstd",
 ]
 
