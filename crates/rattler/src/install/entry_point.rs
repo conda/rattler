@@ -86,12 +86,12 @@ fn ensure_entry_point_relative_path(
 /// `scripts/update-launchers.py` for how to refresh them.
 ///
 /// [`conda/conda-launchers`]: https://github.com/conda/conda-launchers/releases
-pub fn get_windows_launcher(platform: &Subdir) -> &'static [u8] {
-    match platform {
-        Subdir::Win32 => include_bytes!("../../resources/cli-32.exe"),
-        Subdir::Win64 => include_bytes!("../../resources/cli-64.exe"),
-        Subdir::WinArm64 => include_bytes!("../../resources/cli-arm64.exe"),
-        _ => panic!("unsupported platform for a Windows entry point launcher: {platform}"),
+pub fn get_windows_launcher(subdir: Subdir) -> Option<&'static [u8]> {
+    match subdir {
+        Subdir::Win32 => Some(include_bytes!("../../resources/cli-32.exe")),
+        Subdir::Win64 => Some(include_bytes!("../../resources/cli-64.exe")),
+        Subdir::WinArm64 => Some(include_bytes!("../../resources/cli-arm64.exe")),
+        _ => None,
     }
 }
 
@@ -138,7 +138,12 @@ pub fn create_windows_python_entry_point(
         script_contents,
     )?;
 
-    let launcher_bytes = get_windows_launcher(target_platform);
+    let launcher_bytes = get_windows_launcher(*target_platform).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("no Windows entry point launcher is available for {target_platform}"),
+        )
+    })?;
     write_validated_entry_point_bytes(
         target_dir.path(),
         &relative_path_script_exe,

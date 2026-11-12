@@ -11,7 +11,7 @@
 //! renderer) and `FORCE_HYPERLINK=0` turns them off, following the convention
 //! of the crate that does the detection.
 
-use std::{fmt::Display, path::Path, str::FromStr, sync::OnceLock};
+use std::{fmt::Display, path::Path, sync::OnceLock};
 
 use rattler_conda_types::Subdir;
 pub use supports_hyperlinks::Stream;
@@ -141,7 +141,7 @@ fn parse_channel(channel: &str) -> Option<(Host, String)> {
     // A channel is sometimes referred to by one of its subdirs; the web pages
     // are per channel, so the subdir is dropped.
     if let Some(last) = segments.last()
-        && Subdir::from_str(last).is_ok()
+        && Subdir::from_known_str(last).is_some()
     {
         segments.pop();
     }
