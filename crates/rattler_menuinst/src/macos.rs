@@ -8,7 +8,7 @@ use std::{
 use fs_err as fs;
 use fs_err::File;
 use plist::{Dictionary, Value};
-use rattler_conda_types::{Subdir, menuinst::MacOsTracker};
+use rattler_conda_types::{Subdir, menuinst::MacOsTracker, utils::ensure_safe_path_component};
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
@@ -341,6 +341,8 @@ fn lsregister(args: &[&str], directory: &Path) -> Result<(), MenuInstError> {
 }
 
 impl MacOSMenu {
+    /// Fails if the resolved item name cannot be used as a single file or
+    /// directory name, because it names the `.app` bundle directory.
     fn new_impl(
         prefix: &Path,
         item: MacOS,
@@ -348,24 +350,25 @@ impl MacOSMenu {
         menu_mode: MenuMode,
         placeholders: &BaseMenuItemPlaceholders,
         directories: Option<Directories>,
-    ) -> Self {
+    ) -> Result<Self, MenuInstError> {
         let name = command
             .name
             .resolve(crate::schema::Environment::Base, placeholders);
+        ensure_safe_path_component(&name)?;
 
         let bundle_name = format!("{name}.app");
         let directories = directories.unwrap_or(Directories::new(menu_mode, &bundle_name));
         tracing::info!("Editing menu item for {bundle_name}");
 
         let refined_placeholders = placeholders.refine(&directories.location);
-        Self {
+        Ok(Self {
             name,
             prefix: prefix.to_path_buf(),
             item,
             command,
             directories,
             placeholders: refined_placeholders,
-        }
+        })
     }
 
     #[cfg(test)]
@@ -376,7 +379,7 @@ impl MacOSMenu {
         menu_mode: MenuMode,
         placeholders: &BaseMenuItemPlaceholders,
         directories: Directories,
-    ) -> Self {
+    ) -> Result<Self, MenuInstError> {
         Self::new_impl(
             prefix,
             item,
@@ -393,7 +396,7 @@ impl MacOSMenu {
         command: MenuItemCommand,
         menu_mode: MenuMode,
         placeholders: &BaseMenuItemPlaceholders,
-    ) -> Self {
+    ) -> Result<Self, MenuInstError> {
         Self::new_impl(prefix, item, command, menu_mode, placeholders, None)
     }
 
@@ -874,7 +877,7 @@ pub(crate) fn install_menu_item(
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<MacOsTracker, MenuInstError> {
-    let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
+    let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders)?;
     let mut tracker = MacOsTracker::default();
     menu.install(&mut tracker)?;
     Ok(tracker)
@@ -1057,7 +1060,8 @@ mod tests {
             MenuMode::User,
             &placeholders,
             dirs.clone(),
-        );
+        )
+        .unwrap();
         let mut tracker = MacOsTracker::default();
         menu.install(&mut tracker).unwrap();
 
@@ -1068,6 +1072,33 @@ mod tests {
         insta::assert_snapshot!(
             fs::read_to_string(dirs.location.join("Contents/Info.plist")).unwrap()
         );
+    }
+
+    #[test]
+    fn test_rejects_traversing_name() {
+        let fake_prefix = FakePrefix::new(Path::new("spyder/menu.json"));
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            rattler_conda_types::Subdir::current().expect("host platform"),
+        );
+
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let macos = item.platforms.osx.unwrap();
+        let mut command = item.command.merge(macos.base);
+        command.name = serde_json::from_value(serde_json::json!("../../escape")).unwrap();
+
+        let result = super::MacOSMenu::new(
+            fake_prefix.prefix(),
+            macos.specific,
+            command,
+            MenuMode::User,
+            &placeholders,
+        );
+        assert!(matches!(
+            result,
+            Err(crate::MenuInstError::InvalidMenuName(_))
+        ));
     }
 
     /// Test macOS version parsing

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use rattler_conda_types::{
     PrefixRecord, Subdir,
     menuinst::{MenuMode, Tracker},
+    utils::InvalidPathComponentError,
 };
 
 #[cfg(target_os = "linux")]
@@ -34,6 +35,12 @@ pub enum MenuInstError {
 
     #[error("the platform of the current host is not a known conda platform")]
     UnknownHostPlatform,
+
+    /// A menu or menu item name from the package's menu schema cannot be used
+    /// as a single file or directory name, for example because it contains a
+    /// path separator or `..`.
+    #[error("invalid menu name: {0}")]
+    InvalidMenuName(#[from] InvalidPathComponentError),
 
     #[cfg(target_os = "linux")]
     #[error("could not quote command with shlex: {0}")]

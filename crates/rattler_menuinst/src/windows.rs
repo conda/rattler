@@ -3,6 +3,7 @@ use fs_err as fs;
 use rattler_conda_types::{
     Subdir,
     menuinst::{WindowsFileExtension, WindowsTerminalProfile, WindowsTracker, WindowsUrlProtocol},
+    utils::ensure_safe_path_component,
 };
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
@@ -118,6 +119,11 @@ pub struct WindowsMenu {
 const SHORTCUT_EXTENSION: &str = "lnk";
 
 impl WindowsMenu {
+    /// Creates a menu item.
+    ///
+    /// Fails if `menu_name` or the resolved item name cannot be used as a single
+    /// file or directory name, because both are joined onto the shortcut
+    /// directories.
     pub fn new(
         menu_name: &str,
         prefix: &Path,
@@ -126,8 +132,10 @@ impl WindowsMenu {
         directories: Directories,
         placeholders: &BaseMenuItemPlaceholders,
         menu_mode: MenuMode,
-    ) -> Self {
+    ) -> Result<Self, MenuInstError> {
         let name = command.name.resolve(Environment::Base, placeholders);
+        ensure_safe_path_component(menu_name)?;
+        ensure_safe_path_component(&name)?;
 
         let shortcut_name = format!("{name}.{SHORTCUT_EXTENSION}");
 
@@ -136,7 +144,7 @@ impl WindowsMenu {
             .join(&shortcut_name)
             .with_extension(SHORTCUT_EXTENSION);
 
-        Self {
+        Ok(Self {
             menu_name: menu_name.to_string(),
             prefix: prefix.to_path_buf(),
             name,
@@ -145,7 +153,7 @@ impl WindowsMenu {
             directories,
             placeholders: placeholders.refine(&location),
             menu_mode,
-        }
+        })
     }
 
     fn script_content(&self) -> Result<String, MenuInstError> {
@@ -554,7 +562,7 @@ pub(crate) fn install_menu_item(
         directories,
         placeholders,
         menu_mode,
-    );
+    )?;
     menu.install(&mut tracker)?;
     Ok(tracker)
 }
@@ -631,4 +639,62 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
 
     notify_shell_changes();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use rattler_conda_types::{Subdir, menuinst::MenuMode};
+
+    use super::{Directories, WindowsMenu};
+    use crate::{MenuInstError, render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
+
+    /// Builds a menu item from a schema with the given menu name and item name,
+    /// using shortcut directories inside a temporary directory.
+    fn new_menu(menu_name: &str, name: &str) -> Result<WindowsMenu, MenuInstError> {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let prefix = tmp_dir.path().join("prefix");
+        let schema: MenuInstSchema = serde_json::from_value(serde_json::json!({
+            "$id": "https://schemas.conda.io/menuinst-1.schema.json",
+            "$schema": "https://json-schema.org/draft-07/schema",
+            "menu_name": menu_name,
+            "menu_items": [{
+                "name": name,
+                "description": "test",
+                "command": ["{{ PREFIX }}/python.exe"],
+                "platforms": { "win": {} }
+            }]
+        }))
+        .unwrap();
+        let item = schema.menu_items[0].clone();
+        let windows = item.platforms.win.unwrap();
+        let placeholders =
+            BaseMenuItemPlaceholders::new(&prefix, &prefix, Subdir::current().unwrap());
+
+        WindowsMenu::new(
+            &schema.menu_name,
+            &prefix,
+            windows.specific,
+            item.command.merge(windows.base),
+            Directories::fake_folders(&tmp_dir.path().join("dirs")),
+            &placeholders,
+            MenuMode::User,
+        )
+    }
+
+    #[test]
+    fn test_accepts_regular_names() {
+        assert!(new_menu("Anaconda3 (64-bit)", "Spyder 6 (base)").is_ok());
+    }
+
+    #[test]
+    fn test_rejects_traversing_item_name() {
+        let result = new_menu("Menu", r"..\..\escape");
+        assert!(matches!(result, Err(MenuInstError::InvalidMenuName(_))));
+    }
+
+    #[test]
+    fn test_rejects_traversing_menu_name() {
+        let result = new_menu(r"..\escape", "Item");
+        assert!(matches!(result, Err(MenuInstError::InvalidMenuName(_))));
+    }
 }
