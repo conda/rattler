@@ -1030,7 +1030,7 @@ impl ShellEnum {
     pub fn from_parent_process() -> Option<Self> {
         use sysinfo::get_current_pid;
 
-        let mut system_info = sysinfo::System::new();
+        let mut system_info = sysinfo::System::new().ok()?;
 
         // Get current process information
         let mut current_pid = get_current_pid().ok()?;
