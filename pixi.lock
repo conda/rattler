@@ -66,7 +66,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libhwloc-2.15.0-default_hd7c4d0c_1001.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libiconv-1.18-h0cb94f2_3.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/libllvm23-23.1.4-h474f4eb_1.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/libllvm23-23.1.5-h474f4eb_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libnghttp2-1.71.0-hc5e5977_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libpsl-0.23.1-hd9e3e90_1.conda
@@ -77,7 +77,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/libxml2-16-2.15.4-hf3af7cc_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libxml2-2.15.4-h7df9aa5_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/llvm-openmp-23.1.4-h7148c6a_0.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/llvm-openmp-23.1.5-h7148c6a_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/make-4.4.1-h1114479_4.conda
       - conda: https://prefix.dev/conda-forge/linux-64/mimalloc-3.2.7-h54a6638_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/mold-2.40.4-h122c784_3.conda
@@ -152,7 +152,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-64/libxml2-16-2.15.4-h8376fb4_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libxml2-2.15.4-hb56241c_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libzlib-1.3.2-hbb4bfdb_3.conda
-      - conda: https://prefix.dev/conda-forge/osx-64/llvm-openmp-23.1.4-h8c1e6b9_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-64/llvm-openmp-23.1.5-h8c1e6b9_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/llvm-tools-21-21.1.8-h36529c3_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/llvm-tools-21.1.8-h8c1e6b9_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/make-4.4.1-hd77389f_4.conda
@@ -218,7 +218,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/libxml2-16-2.15.4-heb56d2d_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libxml2-2.15.4-h550178d_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-openmp-23.1.4-hdb3d66b_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-openmp-23.1.5-hdb3d66b_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-tools-21-21.1.8-h79441dc_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-tools-21.1.8-hdb3d66b_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/make-4.4.1-h63fc045_4.conda
@@ -317,7 +317,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libhwloc-2.15.0-default_hd7c4d0c_1001.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libiconv-1.18-h0cb94f2_3.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/libllvm23-23.1.4-h474f4eb_1.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/libllvm23-23.1.5-h474f4eb_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libnghttp2-1.71.0-hc5e5977_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libpsl-0.23.1-hd9e3e90_1.conda
@@ -328,7 +328,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/libxml2-16-2.15.4-hf3af7cc_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libxml2-2.15.4-h7df9aa5_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/llvm-openmp-23.1.4-h7148c6a_0.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/llvm-openmp-23.1.5-h7148c6a_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/make-4.4.1-h1114479_4.conda
       - conda: https://prefix.dev/conda-forge/linux-64/mimalloc-3.2.7-h54a6638_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/mold-2.40.4-h122c784_3.conda
@@ -411,7 +411,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-64/libxml2-16-2.15.4-h8376fb4_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libxml2-2.15.4-hb56241c_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libzlib-1.3.2-hbb4bfdb_3.conda
-      - conda: https://prefix.dev/conda-forge/osx-64/llvm-openmp-23.1.4-h8c1e6b9_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-64/llvm-openmp-23.1.5-h8c1e6b9_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/llvm-tools-21-21.1.8-h36529c3_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/llvm-tools-21.1.8-h8c1e6b9_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/make-4.4.1-hd77389f_4.conda
@@ -485,7 +485,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/libxml2-16-2.15.4-heb56d2d_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libxml2-2.15.4-h550178d_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-openmp-23.1.4-hdb3d66b_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-openmp-23.1.5-hdb3d66b_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-tools-21-21.1.8-h79441dc_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-tools-21.1.8-hdb3d66b_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/make-4.4.1-h63fc045_4.conda
@@ -1880,9 +1880,9 @@ packages:
     - libiconv >=1.18,<2.0a0
   size: 789471
   timestamp: 1787033836207
-- conda: https://prefix.dev/conda-forge/linux-64/libllvm23-23.1.4-h474f4eb_1.conda
-  sha256: 17aabc12cc1f07be885d4d7fd749cb67763e28427fda6352b003701ab3d81026
-  md5: f8cb687eb394e571d47bb0ac40543b25
+- conda: https://prefix.dev/conda-forge/linux-64/libllvm23-23.1.5-h474f4eb_0.conda
+  sha256: 9ab8b037a54db1abeb20f9a5e82e90a22f8a4b27094b599c04846ab58ed9a654
+  md5: ed9777b6ef45514103feb5adcc4e58b1
   depends:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=15
@@ -1895,9 +1895,9 @@ packages:
   license_family: Apache
   run_exports:
     weak:
-    - libllvm23 >=23.1.4,<23.2.0a0
-  size: 45078820
-  timestamp: 1792569765974
+    - libllvm23 >=23.1.5,<23.2.0a0
+  size: 45069292
+  timestamp: 1793798644563
 - conda: https://prefix.dev/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda
   sha256: 9787df8c22a59c9a70d3e5a10db9ad663485e75e9ccc3f09bd092cb7b95e0dab
   md5: 1390b7c5ac0b1d8e447bc5efa6d3c8c2
@@ -2119,23 +2119,23 @@ packages:
     - libzlib >=1.3.2,<2.0a0
   size: 63713
   timestamp: 1785362952714
-- conda: https://prefix.dev/conda-forge/linux-64/llvm-openmp-23.1.4-h7148c6a_0.conda
-  sha256: 7de1204abbcf20aa8cb62c8a1385177ded2b7ca536b79c409866e46f30b0242f
-  md5: ad441557f951f09d7e4c79731a6a34dc
+- conda: https://prefix.dev/conda-forge/linux-64/llvm-openmp-23.1.5-h7148c6a_0.conda
+  sha256: f4b1e7295d81a34f604cc2a16d620cc39b3e190618f0df50a1c654bd59764dc8
+  md5: 9cce0e7f4ded5b077718d11f9ccb5fa3
   depends:
   - __glibc >=2.17,<3.0.a0
   constrains:
   - intel-openmp <0.0a0
-  - openmp 23.1.4|23.1.4.*
+  - openmp 23.1.5|23.1.5.*
   license: Apache-2.0 WITH LLVM-exception
   license_family: APACHE
   run_exports:
     strong:
-    - llvm-openmp >=23.1.4
+    - llvm-openmp >=23.1.5
     - _openmp_mutex >=4.5
     - _openmp_mutex * *_llvm
-  size: 6130038
-  timestamp: 1792567140233
+  size: 6118953
+  timestamp: 1793827614239
 - conda: https://prefix.dev/conda-forge/linux-64/make-4.4.1-h1114479_4.conda
   sha256: d6a81e5c142d7be6a992f618097351e7996f81a6295045df3f9b4f498e1066a8
   md5: 538c2493de55d1fe2d90e0adc23d4948
@@ -4195,21 +4195,21 @@ packages:
     - libzlib >=1.3.2,<2.0a0
   size: 58993
   timestamp: 1785276808631
-- conda: https://prefix.dev/conda-forge/osx-64/llvm-openmp-23.1.4-h8c1e6b9_0.conda
-  sha256: 6841e307728ddad340380b0e5b4434f051c5650f8d394fcaf364464672005f5d
-  md5: 45a8bc0f4a73361247b83eccdeb8ada5
+- conda: https://prefix.dev/conda-forge/osx-64/llvm-openmp-23.1.5-h8c1e6b9_0.conda
+  sha256: 80c9c88900445ca36fc338adceb9540d053321523ff7018e7c2c676d8f7f0dd0
+  md5: 54816d0f39b274da1a2207ba82833df9
   depends:
   - __osx >=11.0
   constrains:
   - intel-openmp <0.0a0
-  - openmp 23.1.4|23.1.4.*
+  - openmp 23.1.5|23.1.5.*
   license: Apache-2.0 WITH LLVM-exception
   license_family: APACHE
   run_exports:
     strong:
-    - llvm-openmp >=23.1.4
-  size: 311845
-  timestamp: 1792567072774
+    - llvm-openmp >=23.1.5
+  size: 312026
+  timestamp: 1793827586701
 - conda: https://prefix.dev/conda-forge/osx-64/llvm-tools-21-21.1.8-h36529c3_1.conda
   sha256: 496d2f82ea522f5252e4f5b2fba8ecaf8a235376b88ba9beac1052d42d65aa33
   md5: 428d5d0dde69e631b8e6263fc292ecda
@@ -5713,21 +5713,21 @@ packages:
     - libzlib >=1.3.2,<2.0a0
   size: 47822
   timestamp: 1785277049190
-- conda: https://prefix.dev/conda-forge/osx-arm64/llvm-openmp-23.1.4-hdb3d66b_0.conda
-  sha256: cc6d67df56d4ea967e17d938d3108cdf7d971531350df9e7fc5e18cb89066a70
-  md5: 9a6ec2a53da5d75951b88c51018c27fa
+- conda: https://prefix.dev/conda-forge/osx-arm64/llvm-openmp-23.1.5-hdb3d66b_0.conda
+  sha256: 7a68977e62bd0c967509a7a01a25c215bb8027071dafe03aa1976fd8ade94013
+  md5: e726aab6d8cb01515477f18ba47aab78
   depends:
   - __osx >=11.0
   constrains:
   - intel-openmp <0.0a0
-  - openmp 23.1.4|23.1.4.*
+  - openmp 23.1.5|23.1.5.*
   license: Apache-2.0 WITH LLVM-exception
   license_family: APACHE
   run_exports:
     strong:
-    - llvm-openmp >=23.1.4
-  size: 287495
-  timestamp: 1792567065537
+    - llvm-openmp >=23.1.5
+  size: 287928
+  timestamp: 1793827550286
 - conda: https://prefix.dev/conda-forge/osx-arm64/llvm-tools-21-21.1.8-h79441dc_1.conda
   sha256: 758cf9c842b4a3678f52c768b66bbfdb812a715601edb9b75c577249d448e33c
   md5: 269fcdde9a200135f812c74785c08615
