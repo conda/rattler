@@ -486,8 +486,26 @@ impl Version {
     }
 }
 
-/// Returns true if the specified segments are considered to start with the
-/// other segments.
+/// Returns true if the segments in `a` start with the prefix segments in `b`.
+///
+/// This implements the fuzzy equality of [CEP 29], with segment equality as
+/// defined by [CEP 33]:
+///
+/// * Every prefix segment except the last must be equal to the corresponding
+///   version segment. Missing components and missing segments are treated as
+///   `0`, so `1.1c0.1` starts with `1.1c.1` and `1` starts with `1.0.0`, but
+///   `1.1c` does not start with `1.1.0` because `1c != 1`.
+/// * The last prefix segment only has to match the leading components of the
+///   corresponding version segment. Extra components in that version segment
+///   are allowed, so `1.0.1c` starts with `1.0.1` (e.g. `openssl 1.0.1c`
+///   matches `1.0.1.*`). This is more lenient than a literal reading of
+///   CEP 29, but conda behaves the same and existing specs rely on it.
+/// * Version segments after the last prefix segment are ignored.
+///
+/// Components are compared by value: `1.1rc1` does not start with `1.1r`.
+///
+/// [CEP 29]: https://conda.org/learn/ceps/cep-0029/
+/// [CEP 33]: https://conda.org/learn/ceps/cep-0033/
 fn segments_starts_with<
     'a,
     'b,
@@ -513,9 +531,11 @@ fn segments_starts_with<
             // E.g., "1.0.1.2" starts with "1.0.1"
             EitherOrBoth::Left(_) => return true,
             EitherOrBoth::Right(segment) => {
-                // Prefix has more segments. Zero segments are OK (implicit zeros).
-                // E.g., "1.0" starts with "1.0.0"
-                if segment.is_zero() {
+                // Prefix has more segments. Zero segments are OK (implicit zeros),
+                // e.g. "1.0" starts with "1.0.0". But like above, the previous
+                // segment must not have had extra components, e.g. "1.1c" does
+                // NOT start with "1.1.0" because "1c" != "1".
+                if !had_extra_left && segment.is_zero() {
                     continue;
                 }
                 return false;
@@ -1599,6 +1619,116 @@ mod test {
         // Negative cases - these should NOT match
         assert!(!Version::from_str("1.0.2a").unwrap().starts_with(&prefix));
         assert!(!Version::from_str("1.0.1c").unwrap().starts_with(&prefix_2));
+    }
+
+    /// Fuzzy equality as defined by CEP 29: all prefix segments must be equal
+    /// (CEP 33 equality, missing components and segments are `0`). Only the
+    /// last prefix segment may have extra components in the version.
+    #[rstest]
+    // Equal segments.
+    #[case("1.2.3", "1.2", true)]
+    #[case("1.2", "1.2", true)]
+    #[case("1.2", "1.3", false)]
+    // Missing components and segments are zeros, on either side.
+    #[case("1", "1.0.0", true)]
+    #[case("1.0", "1.0.0", true)]
+    #[case("1", "1.0.1", false)]
+    #[case("1.1c0.1", "1.1c.1", true)]
+    #[case("1.1c.1", "1.1c0.1", true)]
+    #[case("1.1c00.1", "1.1c.1", true)]
+    #[case("1.1c0a.1", "1.1c.1", false)]
+    #[case("1.1c1.1", "1.1c.1", false)]
+    #[case("1.1c0.1", "1.1c.2", false)]
+    // Extra non-zero components are not allowed in an intermediate segment,
+    // also not when all following prefix segments are zero.
+    #[case("1.1c.1", "1.1.1", false)]
+    #[case("1.1c", "1.1.0", false)]
+    #[case("1.1c", "1.1.0.0", false)]
+    #[case("1a", "1.0", false)]
+    #[case("1a.0", "1.0", false)]
+    #[case("1.1c.0", "1.1c.0.0", true)]
+    #[case("1.1c", "1.1c.0", true)]
+    // Extra components are allowed in the last prefix segment.
+    #[case("1.0.1c", "1.0.1", true)]
+    #[case("1.1.1w", "1.1.1", true)]
+    #[case("1.2rc1", "1.2", true)]
+    #[case("1.0.0_version0foo", "1.0.0_version", true)]
+    #[case("1.1c", "1.1", true)]
+    // Components are compared by value, not as string prefixes.
+    #[case("1.1rc1", "1.1r", false)]
+    #[case("1.1rc1", "1.1rc", true)]
+    #[case("1.0.0_version1", "1.0.0_ver", false)]
+    // Epochs must be equal.
+    #[case("1!1.2", "1.2", false)]
+    #[case("1!1.2", "1!1.2", true)]
+    // Local versions follow the same rules.
+    #[case("1.0+abc0.1", "1.0+abc.1", true)]
+    #[case("1.0+abc", "1.0+abc.0", true)]
+    #[case("1.0+abcd", "1.0+abc.0", false)]
+    #[case("1.0+abc.1", "1.0", true)]
+    fn starts_with_cep_29(#[case] version: &str, #[case] prefix: &str, #[case] expected: bool) {
+        let version = Version::from_str(version).unwrap();
+        let prefix = Version::from_str(prefix).unwrap();
+        assert_eq!(
+            version.starts_with(&prefix),
+            expected,
+            "{version} starts with {prefix}"
+        );
+    }
+
+    /// `~=X.Y` is `>=X.Y` combined with fuzzy equality on `X` (CEP 29).
+    #[rstest]
+    #[case("1.1c0.1.2", "1.1c.1.1", true)]
+    #[case("1.1c.1.1", "1.1c.1.1", true)]
+    #[case("1.1c.2", "1.1c.1.1", false)]
+    #[case("1.1c", "1.1.0.1", false)]
+    // `post` sorts after numbers, so only the fuzzy equality rejects this.
+    #[case("1.1post", "1.1.0.1", false)]
+    #[case("1.1post", "1.1.1", true)]
+    // `1.0.1c` sorts before `1.0.1`, so it fails the `>=` part.
+    #[case("1.0.1c", "1.0.1", false)]
+    #[case("1.0.1g", "1.0.1c", true)]
+    #[case("1.0.2", "1.0.1", true)]
+    #[case("1.1", "1.0.1", false)]
+    #[case("1.0.0", "1.0.1", false)]
+    fn compatible_with_cep_29(#[case] version: &str, #[case] limit: &str, #[case] expected: bool) {
+        let version = Version::from_str(version).unwrap();
+        let limit = Version::from_str(limit).unwrap();
+        assert_eq!(
+            version.compatible_with(&limit),
+            expected,
+            "{version} compatible with {limit}"
+        );
+    }
+
+    /// Two versions that are equal must also start with each other.
+    #[test]
+    fn equal_versions_start_with_each_other() {
+        const SEGMENTS: [&str; 9] = ["0", "00", "1", "1c", "1c0", "c", "0c", "1a1", "1a0"];
+        let mut versions = Vec::new();
+        for a in SEGMENTS {
+            versions.push(a.to_string());
+            for b in SEGMENTS {
+                versions.push(format!("{a}.{b}"));
+                for c in SEGMENTS {
+                    versions.push(format!("{a}.{b}.{c}"));
+                }
+            }
+        }
+        let versions: Vec<_> = versions
+            .iter()
+            .map(|v| Version::from_str(v).unwrap())
+            .collect();
+        for a in &versions {
+            for b in &versions {
+                if a == b {
+                    assert!(
+                        a.starts_with(b),
+                        "{a} == {b} but {a} does not start with {b}"
+                    );
+                }
+            }
+        }
     }
 
     fn get_hash(spec: &impl Hash) -> u64 {

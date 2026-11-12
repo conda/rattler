@@ -548,6 +548,33 @@ mod tests {
         assert!(spec_prefix_zero.matches(&Version::from_str("1.1c.1").unwrap()));
     }
 
+    /// Fuzzy equality and `~=` follow CEP 29: all segments before the glob
+    /// must be equal, except that the last one may have extra components.
+    #[test]
+    fn fuzzy_equality_cep_29() {
+        let matches = |spec: &str, version: &str| {
+            VersionSpec::from_str(spec, ParseStrictness::Strict)
+                .unwrap()
+                .matches(&Version::from_str(version).unwrap())
+        };
+
+        // `1c` is not equal to `1`, so the trailing zero segment does not help.
+        assert!(!matches("1.1.0.*", "1.1c"));
+        assert!(!matches("=1.1.0", "1.1c"));
+        assert!(!matches("1.0.*", "1a"));
+        assert!(!matches("!=1.1.0.*", "1.1"));
+        assert!(matches("!=1.1.0.*", "1.1c"));
+        assert!(!matches("~=1.1.0.1", "1.1c"));
+        assert!(matches("1.1.0.*", "1.1"));
+
+        // Extra components in the last segment are allowed.
+        assert!(matches("1.1.1.*", "1.1.1w"));
+        assert!(matches("=1.2", "1.2rc1"));
+
+        // Components are compared by value, not as string prefixes.
+        assert!(!matches("1.1r.*", "1.1rc1"));
+    }
+
     #[test]
     fn issue_235() {
         assert_eq!(
