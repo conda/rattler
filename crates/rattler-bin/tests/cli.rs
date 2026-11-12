@@ -205,6 +205,139 @@ fn test_solve_multichannel() {
     insta::assert_snapshot!(urls);
 }
 
+/// A channel with `foo` and `bar` 1.0 and 2.0, and a lock file and a prefix
+/// that hold the 1.0 versions.
+const FAVOR_CHANNEL: &str = "./test-data/channels/favor";
+const FAVOR_LOCK_FILE: &str = "./test-data/channels/favor/pixi.lock";
+const FAVOR_PREFIX: &str = "./test-data/channels/favor/prefix";
+
+/// Runs `rattler solve` against [`FAVOR_CHANNEL`] and returns the solved urls.
+fn solve_favor_channel(args: &[&str]) -> String {
+    let mut all_args = vec![
+        "solve",
+        "--platform",
+        "linux-64",
+        "--virtual-package",
+        "__unix",
+        "-c",
+        FAVOR_CHANNEL,
+        "--format",
+        "urls",
+    ];
+    all_args.extend_from_slice(args);
+    normalize_test_data_urls(&run_rattler(&all_args))
+}
+
+/// Replaces the machine specific part of `file://` urls into `test-data`.
+fn normalize_test_data_urls(output: &str) -> String {
+    regex::Regex::new(r"file://\S*/test-data/")
+        .expect("the pattern is valid")
+        .replace_all(output, "file:///[ROOT]/test-data/")
+        .into_owned()
+}
+
+/// Favoring a lock file keeps its versions, although newer ones exist. Both
+/// solver backends agree.
+#[test]
+fn test_solve_favor_lock_file() {
+    assert_eq!(
+        solve_favor_channel(&["foo"]),
+        "file:///[ROOT]/test-data/channels/favor/noarch/bar-2.0-0.tar.bz2\n\
+         file:///[ROOT]/test-data/channels/favor/noarch/foo-2.0-0.tar.bz2\n",
+        "without favoring, the newest versions are solved"
+    );
+    let resolvo = solve_favor_channel(&["foo", "--favor", FAVOR_LOCK_FILE]);
+    let libsolv = solve_favor_channel(&["foo", "--favor", FAVOR_LOCK_FILE, "--solver", "libsolv"]);
+    assert_eq!(resolvo, libsolv);
+    insta::assert_snapshot!(resolvo);
+}
+
+/// A favored record that is not part of any channel is solved with its own
+/// dependencies, which nothing in the channel depends on (`qux`).
+#[test]
+fn test_solve_favor_lock_file_environment() {
+    insta::assert_snapshot!(solve_favor_channel(&[
+        "foo",
+        "--favor",
+        FAVOR_LOCK_FILE,
+        "-e",
+        "old"
+    ]));
+}
+
+/// A favor gives way to a spec that requires another version, a pin does not.
+#[test]
+fn test_solve_pin_lock_file() {
+    assert!(
+        solve_favor_channel(&["foo>=2", "--favor", FAVOR_LOCK_FILE]).contains("foo-2.0-0"),
+        "a favored version is replaced when the specs require it"
+    );
+    // Pinning only `bar` 1.0 keeps `foo` at the newest version that is
+    // compatible with it.
+    assert!(
+        solve_favor_channel(&[
+            "foo",
+            "--pin",
+            &format!("{FAVOR_PREFIX}/conda-meta/bar-1.0-0.json")
+        ])
+        .contains("https://example.com/installed/noarch/bar-1.0-0.tar.bz2"),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
+        .args([
+            "solve",
+            "foo>=2",
+            "--platform",
+            "linux-64",
+            "--virtual-package",
+            "__unix",
+            "-c",
+            FAVOR_CHANNEL,
+            "--pin",
+            FAVOR_LOCK_FILE,
+        ])
+        .current_dir(WORKSPACE_ROOT)
+        .output()
+        .expect("failed to run the rattler binary");
+    assert!(!output.status.success(), "a spec cannot overrule a pin");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("foo 1.0 is locked"), "{stderr}");
+}
+
+/// `create` favors the installed packages unless asked not to.
+#[test]
+fn test_create_favors_installed_packages() {
+    let create = |extra_args: &[&str]| {
+        let mut args = vec![
+            "create",
+            "foo",
+            "--dry-run",
+            "-p",
+            FAVOR_PREFIX,
+            "--platform",
+            "linux-64",
+            "--virtual-package",
+            "__unix",
+            "-c",
+            FAVOR_CHANNEL,
+        ];
+        args.extend_from_slice(extra_args);
+        let output = run_rattler(&args);
+        // Only the transaction is of interest, not the progress before it.
+        let transaction = output
+            .lines()
+            .skip_while(|line| {
+                !line.starts_with(['~', '+', '-']) && *line != "No operations necessary"
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        normalize_test_data_urls(&transaction)
+    };
+
+    assert_eq!(create(&[]), "No operations necessary");
+    insta::assert_snapshot!(create(&["--no-favor-installed"]));
+}
+
 /// The skill embeds the crate version, which is replaced so the snapshot does
 /// not change on every release.
 ///

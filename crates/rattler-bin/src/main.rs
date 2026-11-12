@@ -11,6 +11,7 @@ use crate::{commands::exec, writer::IndicatifWriter};
 mod attestation_args;
 mod commands;
 mod exclude_newer;
+mod favor_sources;
 #[cfg(feature = "sigstore")]
 mod publisher_args;
 mod solver_args;

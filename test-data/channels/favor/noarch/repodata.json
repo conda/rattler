@@ -1,0 +1,83 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {
+    "foo-1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "depends": [
+        "bar"
+      ],
+      "license": "MIT",
+      "name": "foo",
+      "noarch": "generic",
+      "md5": "82c48ea23ab11f48965482fe3b00995f",
+      "sha256": "4944aafc8a7a39fbf0eee7a6c443b6504ec56051381c57c4982a9a497e6837a4",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0"
+    },
+    "foo-2.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "depends": [
+        "bar >=2"
+      ],
+      "license": "MIT",
+      "name": "foo",
+      "noarch": "generic",
+      "md5": "761a6bf4a8208a0549cb05876dba54bc",
+      "sha256": "b43621e44b95ba5aaa72f5d2bd0fbcd79791a9ffd5baeeb2939afbdef7b338e9",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "2.0"
+    },
+    "bar-1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "depends": [],
+      "license": "MIT",
+      "name": "bar",
+      "noarch": "generic",
+      "md5": "be18e258734591414a7b72a4463260ad",
+      "sha256": "9e98dae797aa686b84f469930f653ae85f469bc59bf10c5bb2ef72eeae06523e",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0"
+    },
+    "bar-2.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "depends": [],
+      "license": "MIT",
+      "name": "bar",
+      "noarch": "generic",
+      "md5": "c3581109da6e60fe632356056fa6a61b",
+      "sha256": "457997cdac7fdfd43ea7b0853d01dfd5e74ec6469e50de44bc6cdc03caf3d5e5",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "2.0"
+    },
+    "qux-1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "depends": [],
+      "license": "MIT",
+      "name": "qux",
+      "noarch": "generic",
+      "md5": "2d12641dbd10cc11ae9c2f0a0da68c99",
+      "sha256": "2d12d962771b38b2015397a980d86b157e5093acb7c4b4122be623c869287cef",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0"
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 1
+}
