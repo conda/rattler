@@ -168,7 +168,7 @@ serde-json-python-formatter = "0.1"
 serde_repr = "0.1"
 serde-value = "0.7"
 serde_with = "3"
-serde_yaml = "0.9"
+serde_yaml = { package = "yaml_serde", version = "0.10" }
 serde-saphyr = "2.0"
 serde-untagged = "0.1"
 sha2 = "0.11"
