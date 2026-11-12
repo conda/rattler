@@ -1,9 +1,10 @@
 //! Tests for V3 package variant flags.
 
 use super::helpers::{PackageBuilder, SolverCase, run_solver_cases};
+use rattler_conda_types::StringMatcher;
 #[cfg(feature = "libsolv_c")]
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions, RepodataRevision};
-use rattler_solve::SolverImpl;
+use rattler_solve::{ChannelPriority, FlagPreference, SolveStrategy, SolverImpl};
 #[cfg(feature = "libsolv_c")]
 use rattler_solve::{SolveError, SolverTask};
 
@@ -56,6 +57,226 @@ pub(super) fn solve_dependency_flags_select_matching_variant<T: SolverImpl + Def
             .expect_present([&consumer, &mkl])
             .expect_absent([&openblas])],
     );
+}
+
+fn prefer(flag: &str) -> FlagPreference {
+    FlagPreference::Prefer(flag.parse::<StringMatcher>().unwrap())
+}
+
+fn avoid(flag: &str) -> FlagPreference {
+    FlagPreference::Avoid(flag.parse::<StringMatcher>().unwrap())
+}
+
+pub(super) fn solve_flag_preferences_order_variants<T: SolverImpl + Default>() {
+    // The release build has the higher build number, so it wins by default.
+    let release = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("release_1")
+        .build_number(1)
+        .flags(["release"])
+        .build();
+    let debug = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("debug_0")
+        .build_number(0)
+        .flags(["debug"])
+        .build();
+    let debug_cuda = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("debug_cuda_0")
+        .build_number(0)
+        .flags(["debug", "cuda"])
+        .build();
+    let newer_release = PackageBuilder::new("foo")
+        .version("2.0.0")
+        .build_string("release_0")
+        .flags(["release"])
+        .build();
+    let newer_debug = PackageBuilder::new("foo")
+        .version("2.0.0")
+        .build_string("debug_0")
+        .flags(["debug"])
+        .build();
+    let consumer = PackageBuilder::new("consumer")
+        .version("1.0.0")
+        .depends(["foo[flags=[release]]"])
+        .build();
+
+    run_solver_cases::<T>(&[
+        SolverCase::new("without preferences the highest build number wins")
+            .repository(vec![release.clone(), debug.clone()])
+            .specs(["foo"])
+            .expect_present([&release])
+            .expect_absent([&debug]),
+        SolverCase::new("a preferred flag outranks the build number")
+            .repository(vec![release.clone(), debug.clone()])
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&debug])
+            .expect_absent([&release]),
+        SolverCase::new("an avoided flag loses to a lower build number")
+            .repository(vec![release.clone(), debug.clone()])
+            .specs(["foo"])
+            .flag_preferences([avoid("release")])
+            .expect_present([&debug])
+            .expect_absent([&release]),
+        SolverCase::new("earlier preferences take precedence")
+            .repository(vec![release.clone(), debug.clone(), debug_cuda.clone()])
+            .specs(["foo"])
+            .flag_preferences([prefer("debug"), avoid("cuda")])
+            .expect_present([&debug])
+            .expect_absent([&release, &debug_cuda]),
+        SolverCase::new("a later preference still decides among the rest")
+            .repository(vec![release.clone(), debug.clone(), debug_cuda.clone()])
+            .specs(["foo"])
+            .flag_preferences([prefer("debug"), prefer("cuda")])
+            .expect_present([&debug_cuda])
+            .expect_absent([&release, &debug]),
+        SolverCase::new("a higher version wins over a preferred flag")
+            .repository(vec![debug.clone(), newer_release.clone()])
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&newer_release])
+            .expect_absent([&debug]),
+        SolverCase::new("a preference falls back when a spec requires another flag")
+            .repository(vec![consumer.clone(), release.clone(), debug.clone()])
+            .specs(["consumer"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&consumer, &release])
+            .expect_absent([&debug]),
+        SolverCase::new("a locked variant stays favored over a preferred flag")
+            .repository(vec![release.clone(), debug.clone()])
+            .locked_packages([release.clone()])
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&release])
+            .expect_absent([&debug]),
+        SolverCase::new("the lowest version still wins over a preferred flag")
+            .repository(vec![release.clone(), newer_debug.clone()])
+            .specs(["foo"])
+            .strategy(SolveStrategy::LowestVersion)
+            .flag_preferences([prefer("debug")])
+            .expect_present([&release])
+            .expect_absent([&newer_debug]),
+        SolverCase::new("a preference breaks a tie under the lowest version strategy")
+            .repository(vec![release.clone(), debug.clone(), newer_release.clone()])
+            .specs(["foo"])
+            .strategy(SolveStrategy::LowestVersion)
+            .flag_preferences([prefer("debug")])
+            .expect_present([&debug])
+            .expect_absent([&release, &newer_release]),
+    ]);
+
+    // Preferences match flags like `[flags=[...]]` does, including globs.
+    let mkl = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("mkl_1")
+        .build_number(1)
+        .flags(["blas:mkl"])
+        .build();
+    let openblas = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("openblas_0")
+        .build_number(0)
+        .flags(["blas:openblas"])
+        .build();
+    let plain = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("plain_0")
+        .build_number(0)
+        .build();
+    let plain_newer_build = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("plain_2")
+        .build_number(2)
+        .build();
+    run_solver_cases::<T>(&[
+        SolverCase::new("an avoided glob matches any value of a flag")
+            .repository(vec![mkl.clone(), openblas.clone(), plain.clone()])
+            .specs(["foo"])
+            .flag_preferences([avoid("blas:*")])
+            .expect_present([&plain])
+            .expect_absent([&mkl, &openblas]),
+        SolverCase::new("a preferred glob outranks the build number")
+            .repository(vec![
+                mkl.clone(),
+                openblas.clone(),
+                plain.clone(),
+                plain_newer_build.clone(),
+            ])
+            .specs(["foo"])
+            .flag_preferences([prefer("blas:*")])
+            .expect_present([&mkl])
+            .expect_absent([&openblas, &plain, &plain_newer_build]),
+        SolverCase::new("an exact preference outranks a later glob")
+            .repository(vec![mkl.clone(), openblas.clone(), plain.clone()])
+            .specs(["foo"])
+            .flag_preferences([prefer("blas:openblas"), avoid("blas:*")])
+            .expect_present([&openblas])
+            .expect_absent([&mkl, &plain]),
+    ]);
+
+    // A preference only reorders variants within one channel; it never pulls
+    // a variant from a lower-priority channel.
+    let release_high = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("release_0")
+        .flags(["release"])
+        .channel("high")
+        .build();
+    let debug_low = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("debug_0")
+        .flags(["debug"])
+        .channel("low")
+        .build();
+    run_solver_cases::<T>(&[
+        SolverCase::new("flexible channel priority outranks a preferred flag")
+            .repository(vec![release_high.clone()])
+            .repository(vec![debug_low.clone()])
+            .channel_priority(ChannelPriority::Flexible)
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&release_high])
+            .expect_absent([&debug_low]),
+        SolverCase::new("version-first channel priority outranks a preferred flag")
+            .repository(vec![release_high.clone()])
+            .repository(vec![debug_low.clone()])
+            .channel_priority(ChannelPriority::VersionFirst)
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&release_high])
+            .expect_absent([&debug_low]),
+        SolverCase::new("disabled channel priority lets the preference decide")
+            .repository(vec![release_high.clone()])
+            .repository(vec![debug_low.clone()])
+            .channel_priority(ChannelPriority::Disabled)
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&debug_low])
+            .expect_absent([&release_high]),
+    ]);
+}
+
+#[cfg(feature = "libsolv_c")]
+pub(super) fn solve_flag_preferences_are_unsupported<T: SolverImpl + Default>() {
+    let pkg = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .flags(["debug"])
+        .build();
+    let repository = vec![pkg];
+    let task = SolverTask {
+        specs: vec![parse_v3_spec("foo")],
+        flag_preferences: vec![prefer("debug")],
+        ..SolverTask::from_iter([&repository])
+    };
+
+    match T::default().solve(task).unwrap_err() {
+        SolveError::UnsupportedOperations(operations) => {
+            assert_eq!(operations, ["flag_preferences"]);
+        }
+        other => panic!("expected flag preferences to be unsupported, got {other}"),
+    }
 }
 
 #[cfg(feature = "libsolv_c")]
