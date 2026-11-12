@@ -156,7 +156,7 @@ rmp-serde = { version = "1" }
 rstest = { version = "0.28" }
 rstest_reuse = "0.7"
 rustix = { version = "1.1", default-features = false }
-simd-json = { version = "0.18", features = ["serde_impl"] }
+simd-json = { version = "0.19", features = ["serde_impl"] }
 self_cell = "1"
 semver = "1"
 send_wrapper = "0.6"
