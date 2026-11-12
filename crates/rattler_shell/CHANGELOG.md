@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.10](https://github.com/conda/rattler/compare/rattler_shell-v0.29.9...rattler_shell-v0.29.10) - 2026-11-12
+
+### Other
+
+- *(ci)* Update Rust crate sysinfo to 0.40 ([#3168](https://github.com/conda/rattler/pull/3168))
+
 ## [0.29.9](https://github.com/conda/rattler/compare/rattler_shell-v0.29.8...rattler_shell-v0.29.9) - 2026-11-06
 
 ### Other

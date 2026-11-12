@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.2...rattler_vfs-v0.2.3) - 2026-11-12
+
+### Other
+
+- *(exec)* faster `--dematerialized` environments with a writable overlay ([#3139](https://github.com/conda/rattler/pull/3139))
+
 ## [0.2.2](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.1...rattler_vfs-v0.2.2) - 2026-11-06
 
 ### Added
