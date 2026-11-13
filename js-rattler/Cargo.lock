@@ -2303,7 +2303,6 @@ dependencies = [
  "cfg-if",
  "coalesced_map",
  "dashmap",
- "dirs",
  "file_url",
  "fs-err",
  "fslock",
