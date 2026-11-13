@@ -34,7 +34,22 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
 
 pub(crate) const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
-pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
+const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
+
+/// Returns the path of the file that caches the shard index downloaded from
+/// `canonical_shards_url`.
+///
+/// The file is named after the full SHA-256 hash of the URL. Unlike the
+/// conda-compatible names used for `repodata.json` caches (a truncated MD5 of
+/// the URL), this makes it practically impossible for two channels to map to
+/// the same cache file.
+pub(crate) fn shard_index_cache_path(cache_dir: &Path, canonical_shards_url: &Url) -> PathBuf {
+    let hash = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(
+        canonical_shards_url.as_str(),
+    );
+    let hash = hex::encode(hash);
+    cache_dir.join(format!("{hash}{SHARDS_CACHE_SUFFIX}"))
+}
 
 /// The directory inside the cache that holds decompressed shards, named
 /// `<sha256>.msgpack` after the hash of the compressed shard. The directory is
@@ -177,11 +192,7 @@ impl ShardedSubdir {
         let canonical_shards_url = index_base_url
             .join(REPODATA_SHARDS_FILENAME)
             .expect("invalid shard base url");
-        let cache_path = cache_dir.join(format!(
-            "{}{}",
-            crate::utils::url_to_cache_filename(&canonical_shards_url),
-            SHARDS_CACHE_SUFFIX
-        ));
+        let cache_path = shard_index_cache_path(cache_dir, &canonical_shards_url);
 
         if cache_path.exists() {
             // Acquire an exclusive lock before removing the file.

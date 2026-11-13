@@ -5821,7 +5821,6 @@ dependencies = [
  "coalesced_map",
  "criterion",
  "dashmap",
- "dirs",
  "file_url",
  "fs-err",
  "fslock",

@@ -24,7 +24,6 @@ bytes = { workspace = true }
 cache_control = { workspace = true }
 jiff = { workspace = true }
 dashmap = { workspace = true }
-dirs = { workspace = true }
 file_url = { workspace = true }
 futures = { workspace = true }
 hashbrown = { workspace = true }
