@@ -1407,7 +1407,7 @@ mod test {
     #[test]
     fn test_clear_sharded_disk_cache() {
         use crate::gateway::sharded_subdir::{
-            REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedSubdir,
+            REPODATA_SHARDS_FILENAME, ShardedSubdir, shard_index_cache_path,
         };
 
         let cache_dir = tempfile::tempdir().unwrap();
@@ -1425,11 +1425,7 @@ mod test {
         let canonical_shards_url = index_base_url
             .join(REPODATA_SHARDS_FILENAME)
             .expect("invalid shard base url");
-        let cache_path = cache_dir.path().join(format!(
-            "{}{}",
-            crate::utils::url_to_cache_filename(&canonical_shards_url),
-            SHARDS_CACHE_SUFFIX
-        ));
+        let cache_path = shard_index_cache_path(cache_dir.path(), &canonical_shards_url);
 
         // Create mock cache file
         std::fs::write(&cache_path, b"mock shard data").unwrap();

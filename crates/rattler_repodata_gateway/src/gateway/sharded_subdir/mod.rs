@@ -33,7 +33,7 @@ cfg_if! {
         pub use tokio::{ShardCachePolicy, ShardedSubdir};
         // Re-exported for use in tests
         #[cfg(test)]
-        pub(crate) use tokio::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX};
+        pub(crate) use tokio::{REPODATA_SHARDS_FILENAME, shard_index_cache_path};
     }
 }
 
@@ -301,7 +301,6 @@ mod tests {
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
     use crate::sparse::FormatBucketSet;
-    use crate::utils::url_to_cache_filename;
     use crate::{DownloadReporter, Reporter};
     use axum::{
         Router,
@@ -327,7 +326,9 @@ mod tests {
     use tokio::sync::oneshot;
     use url::Url;
 
-    use super::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardCachePolicy, ShardedSubdir};
+    use super::{
+        REPODATA_SHARDS_FILENAME, ShardCachePolicy, ShardedSubdir, shard_index_cache_path,
+    };
 
     /// A mock server that serves a sharded repodata index but returns
     /// configurable responses for shard requests. A revalidation of the index
@@ -474,11 +475,7 @@ mod tests {
                 .unwrap()
                 .join(REPODATA_SHARDS_FILENAME)
                 .unwrap();
-            cache_dir.join(format!(
-                "{}{}",
-                url_to_cache_filename(&index_url),
-                SHARDS_CACHE_SUFFIX
-            ))
+            shard_index_cache_path(cache_dir, &index_url)
         }
 
         /// How many shard downloads the server has answered so far. The index
