@@ -595,11 +595,11 @@ impl Shell for Xonsh {
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
             f,
-            r#"if {backup_key} in $env:
-                $env[{key}] = $env[{backup_key}]
-                del $env[{backup_key}]
-            else:
-                del $env[{key}]"#
+            r#"if "{backup_key}" in $env:
+    $env["{key}"] = $env["{backup_key}"]
+    del $env["{backup_key}"]
+elif "{key}" in $env:
+    del $env["{key}"]"#
         )?)
     }
 }
@@ -892,7 +892,7 @@ fn quote_if_required(s: &str) -> Cow<'_, str> {
     }
 }
 
-/// A [`Shell`] implementation for the Bash shell.
+/// A [`Shell`] implementation for the `NuShell` shell.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NuShell;
 
@@ -965,14 +965,16 @@ impl Shell for NuShell {
     fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
+        let key_quoted = quote_if_required(key);
+        let backup_key_quoted = quote_if_required(backup_key);
         Ok(writeln!(
             f,
-            r#"if ($env | get {backup_key}?) {{
-                $env.{key} = $env.{backup_key}
-                $env = $env | reject {backup_key}
-            }} else {{
-                $env = $env | reject {key}
-            }}"#
+            r#"if "{backup_key}" in $env {{
+    $env.{key_quoted} = $env.{backup_key_quoted}
+    hide-env {backup_key_quoted}
+}} else if "{key}" in $env {{
+    hide-env {key_quoted}
+}}"#
         )?)
     }
 }
@@ -1592,6 +1594,54 @@ mod tests {
         assert_eq!(
             parsed_env,
             HashMap::from([("VAR1", "value1"), ("VAR2", "value2")])
+        );
+    }
+
+    #[test]
+    fn test_restore_env_var() {
+        let mut out = String::new();
+        Xonsh
+            .restore_env_var(&mut out, "CONDA_PREFIX", "CONDA_ENV_SHLVL_1_CONDA_PREFIX")
+            .unwrap();
+        assert_eq!(
+            out.trim(),
+            r#"if "CONDA_ENV_SHLVL_1_CONDA_PREFIX" in $env:
+    $env["CONDA_PREFIX"] = $env["CONDA_ENV_SHLVL_1_CONDA_PREFIX"]
+    del $env["CONDA_ENV_SHLVL_1_CONDA_PREFIX"]
+elif "CONDA_PREFIX" in $env:
+    del $env["CONDA_PREFIX"]"#
+        );
+
+        let mut out = String::new();
+        NuShell
+            .restore_env_var(&mut out, "CONDA_PREFIX", "CONDA_ENV_SHLVL_1_CONDA_PREFIX")
+            .unwrap();
+        assert_eq!(
+            out.trim(),
+            r#"if "CONDA_ENV_SHLVL_1_CONDA_PREFIX" in $env {
+    $env.CONDA_PREFIX = $env.CONDA_ENV_SHLVL_1_CONDA_PREFIX
+    hide-env CONDA_ENV_SHLVL_1_CONDA_PREFIX
+} else if "CONDA_PREFIX" in $env {
+    hide-env CONDA_PREFIX
+}"#
+        );
+
+        let mut out = String::new();
+        NuShell
+            .restore_env_var(
+                &mut out,
+                "ProgramFiles(x86)",
+                "CONDA_ENV_SHLVL_1_ProgramFiles(x86)",
+            )
+            .unwrap();
+        assert_eq!(
+            out.trim(),
+            r#"if "CONDA_ENV_SHLVL_1_ProgramFiles(x86)" in $env {
+    $env."ProgramFiles(x86)" = $env."CONDA_ENV_SHLVL_1_ProgramFiles(x86)"
+    hide-env "CONDA_ENV_SHLVL_1_ProgramFiles(x86)"
+} else if "ProgramFiles(x86)" in $env {
+    hide-env "ProgramFiles(x86)"
+}"#
         );
     }
 }
