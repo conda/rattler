@@ -1,7 +1,7 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;
@@ -50,6 +50,24 @@ pub enum AttestationSource {
     /// No attestation.
     #[default]
     NoAttestation,
+}
+
+/// The Sigstore instance a generated attestation is signed with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum SigstoreInstanceChoice {
+    /// GitHub's instance for private and internal GitHub repositories (as
+    /// reported by the GitHub Actions identity token), the public-good
+    /// instance otherwise. This matches what `actions/attest` does.
+    Auto,
+    /// The Sigstore public-good instance. The signature, including the
+    /// repository, workflow and commit of the signer, is recorded in the
+    /// public Rekor transparency log.
+    #[default]
+    PublicGood,
+    /// GitHub's artifact attestation instance. Nothing is published to a
+    /// transparency log; the bundle carries a timestamp from GitHub's
+    /// timestamp authority instead. Only works in GitHub Actions.
+    Github,
 }
 
 /// Common opts for upload operations
@@ -304,6 +322,22 @@ pub struct PrefixOpts {
     #[arg(long, requires = "generate_attestation")]
     pub store_github_attestation: bool,
 
+    /// The Sigstore instance to sign a generated attestation with.
+    ///
+    /// The public-good instance records the signer's repository, workflow and
+    /// commit in a public transparency log, which reveals the name of a
+    /// private repository. `auto` instead uses GitHub's instance, which keeps
+    /// no public log, for private and internal GitHub repositories; the
+    /// server and everyone verifying the package then have to trust GitHub's
+    /// instance.
+    ///
+    /// Only used with `--generate-attestation`.
+    // No `requires = "generate_attestation"`: clap also applies it to a value
+    // from the environment, which would fail every upload without
+    // `--generate-attestation` while the variable is set.
+    #[arg(long, value_enum, default_value_t, env = "RATTLER_SIGSTORE_INSTANCE")]
+    pub sigstore_instance: SigstoreInstanceChoice,
+
     /// Skip upload if package already exists.
     #[arg(short, long)]
     pub skip_existing: bool,
@@ -315,6 +349,7 @@ pub struct PrefixOpts {
 
 #[derive(Debug)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub struct PrefixData {
     pub url: UrlWithTrailingSlash,
     pub channel: String,
@@ -323,6 +358,7 @@ pub struct PrefixData {
     pub skip_existing: SkipExisting,
     pub force: ForceOverwrite,
     pub store_github_attestation: bool,
+    pub sigstore_instance: SigstoreInstanceChoice,
 }
 
 impl From<PrefixOpts> for PrefixData {
@@ -341,6 +377,7 @@ impl From<PrefixOpts> for PrefixData {
             value.force.into(),
             value.store_github_attestation,
         )
+        .with_sigstore_instance(value.sigstore_instance)
     }
 }
 
@@ -363,7 +400,14 @@ impl PrefixData {
             skip_existing,
             force,
             store_github_attestation,
+            sigstore_instance: SigstoreInstanceChoice::default(),
         }
+    }
+
+    /// Sets the Sigstore instance a generated attestation is signed with.
+    pub fn with_sigstore_instance(mut self, sigstore_instance: SigstoreInstanceChoice) -> Self {
+        self.sigstore_instance = sigstore_instance;
+        self
     }
 }
 
@@ -627,5 +671,49 @@ impl CondaForgeData {
             provider,
             dry_run,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    /// Signing with GitHub's instance is opt-in: its bundles carry no
+    /// transparency log entry, which the receiving server has to accept.
+    #[test]
+    fn the_public_good_instance_is_the_default() {
+        let opts = PrefixOpts::try_parse_from(["prefix", "--channel", "my-channel"]).unwrap();
+        assert_eq!(opts.sigstore_instance, SigstoreInstanceChoice::PublicGood);
+    }
+
+    /// `--sigstore-instance` can also come from `RATTLER_SIGSTORE_INSTANCE`,
+    /// which a CI job may set for every step, so it must not demand
+    /// `--generate-attestation`.
+    #[test]
+    fn sigstore_instance_does_not_require_generate_attestation() {
+        let opts = PrefixOpts::try_parse_from([
+            "prefix",
+            "--channel",
+            "my-channel",
+            "--sigstore-instance",
+            "github",
+        ])
+        .unwrap();
+        assert_eq!(opts.sigstore_instance, SigstoreInstanceChoice::Github);
+        assert!(!opts.generate_attestation);
+
+        let opts = PrefixOpts::try_parse_from([
+            "prefix",
+            "--channel",
+            "my-channel",
+            "--attestation",
+            "attestation.json",
+            "--sigstore-instance",
+            "public-good",
+        ])
+        .unwrap();
+        assert!(opts.attestation.is_some());
     }
 }

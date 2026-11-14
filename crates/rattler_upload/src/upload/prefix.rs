@@ -365,13 +365,13 @@ pub async fn upload_package_to_prefix(
                     repo_owner,
                     repo_name,
                     github_token,
+                    sigstore_instance: prefix_data.sigstore_instance,
                 }
             } else {
                 // Return Sigstore bundle JSON for uploading to prefix.dev
                 AttestationConfig {
-                    repo_owner: None,
-                    repo_name: None,
-                    github_token: None,
+                    sigstore_instance: prefix_data.sigstore_instance,
+                    ..AttestationConfig::default()
                 }
             };
 

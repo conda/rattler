@@ -20,6 +20,7 @@ rustls = [
   "rattler_networking/rustls",
   "rattler_package_streaming/rustls",
   "sigstore-sign?/rustls",
+  "rattler_sigstore?/rustls",
   "opendal?/reqwest-rustls-tls",
 ]
 native-tls = [
@@ -27,9 +28,10 @@ native-tls = [
   "rattler_networking/native-tls",
   "rattler_package_streaming/native-tls",
   "sigstore-sign?/native-tls",
+  "rattler_sigstore?/native-tls",
 ]
 s3 = ["rattler_networking/s3", "rattler_s3", "rattler_s3/opendal", "dep:opendal"]
-sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root"]
+sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root", "dep:rattler_sigstore"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -76,6 +78,7 @@ tokio = { workspace = true, features = [
   "process",
 ] }
 sigstore-sign = { workspace = true, optional = true, default-features = false }
+rattler_sigstore = { workspace = true, optional = true }
 sigstore-trust-root = { workspace = true, optional = true }
 sha2 = { workspace = true }
 

@@ -42,6 +42,20 @@ def test_verification_policy() -> None:
     assert Issuer.gitlab().url == "https://gitlab.com"
 
 
+def test_verification_policy_github_trust_domains() -> None:
+    assert VerificationPolicy.require().github_trust_domains == ("github.com",)
+    assert VerificationPolicy.warn().github_trust_domains == ("github.com",)
+    assert VerificationPolicy.require(github_trust_domains=()).github_trust_domains == ()
+
+    policy = VerificationPolicy.require(github_trust_domains=["github.com", "prod-weu-01"])
+    assert policy.github_trust_domains == ("github.com", "prod-weu-01")
+
+    with pytest.raises(ValueError, match="invalid GitHub trust domain"):
+        VerificationPolicy.require(github_trust_domains=["not/a/domain"])
+    with pytest.raises(TypeError):
+        VerificationPolicy.require(github_trust_domains="github.com")
+
+
 def test_trusted_root_from_json() -> None:
     assert repr(TrustedRoot.from_json(TRUSTED_ROOT_JSON)) == "TrustedRoot()"
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import urlsplit
@@ -154,12 +155,14 @@ class VerificationPolicy:
         publisher: Publisher | None,
         channel_check: ChannelCheck,
         max_sidecar_size: int,
+        github_trust_domains: tuple[str, ...] = (),
     ) -> None:
         self._inner = inner
         self._mode = mode
         self._publisher = publisher
         self._channel_check = channel_check
         self._max_sidecar_size = max_sidecar_size
+        self._github_trust_domains = github_trust_domains
 
     @classmethod
     def disabled(cls) -> VerificationPolicy:
@@ -179,10 +182,21 @@ class VerificationPolicy:
         *,
         channel_check: ChannelCheck = ChannelCheck.REQUIRE,
         max_sidecar_size: int = DEFAULT_MAX_SIDECAR_SIZE,
+        github_trust_domains: Sequence[str] = ("github.com",),
     ) -> VerificationPolicy:
-        """Create a policy that reports verification problems as warnings."""
+        """Create a policy that reports verification problems as warnings.
+
+        Attestations signed with the Sigstore public-good instance are always
+        accepted. `github_trust_domains` names the GitHub trust domains whose
+        Sigstore instances are trusted as well: ``"github.com"`` (the default,
+        like ``gh attestation verify``), or a GitHub Enterprise Cloud data
+        residency region such as ``"prod-weu-01"``. GitHub signs the
+        attestations of private and internal repositories with these
+        instances, which keep no public transparency log. Pass ``()`` to only
+        accept attestations that are recorded in the public log.
+        """
         publisher = publisher or Publisher()
-        return cls._create(VerificationMode.WARN, publisher, channel_check, max_sidecar_size)
+        return cls._create(VerificationMode.WARN, publisher, channel_check, max_sidecar_size, github_trust_domains)
 
     @classmethod
     def require(
@@ -191,10 +205,21 @@ class VerificationPolicy:
         *,
         channel_check: ChannelCheck = ChannelCheck.REQUIRE,
         max_sidecar_size: int = DEFAULT_MAX_SIDECAR_SIZE,
+        github_trust_domains: Sequence[str] = ("github.com",),
     ) -> VerificationPolicy:
-        """Create a policy that rejects packages whose attestations do not verify."""
+        """Create a policy that rejects packages whose attestations do not verify.
+
+        Attestations signed with the Sigstore public-good instance are always
+        accepted. `github_trust_domains` names the GitHub trust domains whose
+        Sigstore instances are trusted as well: ``"github.com"`` (the default,
+        like ``gh attestation verify``), or a GitHub Enterprise Cloud data
+        residency region such as ``"prod-weu-01"``. GitHub signs the
+        attestations of private and internal repositories with these
+        instances, which keep no public transparency log. Pass ``()`` to only
+        accept attestations that are recorded in the public log.
+        """
         publisher = publisher or Publisher()
-        return cls._create(VerificationMode.REQUIRE, publisher, channel_check, max_sidecar_size)
+        return cls._create(VerificationMode.REQUIRE, publisher, channel_check, max_sidecar_size, github_trust_domains)
 
     @classmethod
     def _create(
@@ -203,7 +228,11 @@ class VerificationPolicy:
         publisher: Publisher,
         channel_check: ChannelCheck,
         max_sidecar_size: int,
+        github_trust_domains: Sequence[str],
     ) -> VerificationPolicy:
+        if isinstance(github_trust_domains, str):
+            raise TypeError("github_trust_domains must be a sequence of trust domain names, not a string")
+        github_trust_domains = tuple(github_trust_domains)
         if max_sidecar_size <= 0:
             raise ValueError("max_sidecar_size must be greater than zero")
         factory = PyVerificationPolicy.warn if mode == VerificationMode.WARN else PyVerificationPolicy.require
@@ -212,8 +241,9 @@ class VerificationPolicy:
             publisher.issuer.url if publisher.issuer is not None else None,
             channel_check.value,
             max_sidecar_size,
+            list(github_trust_domains),
         )
-        return cls(inner, mode, publisher, channel_check, max_sidecar_size)
+        return cls(inner, mode, publisher, channel_check, max_sidecar_size, github_trust_domains)
 
     @property
     def mode(self) -> VerificationMode:
@@ -230,6 +260,11 @@ class VerificationPolicy:
     @property
     def max_sidecar_size(self) -> int:
         return self._max_sidecar_size
+
+    @property
+    def github_trust_domains(self) -> tuple[str, ...]:
+        """The GitHub trust domains whose attestations are accepted."""
+        return self._github_trust_domains
 
     @property
     def is_enabled(self) -> bool:
@@ -375,7 +410,9 @@ async def verify_attestation(
 
     Without a `trusted_root` the production trusted root is loaded over TUF on
     first use, which requires network access. Passing one verifies against that
-    trust material instead, leaving the sidecar download as the only request.
+    trust material instead, leaving the sidecar download as the only request,
+    unless the policy opts into GitHub trust domains: their trusted roots are
+    fetched from GitHub when a package needs them.
     """
     if client is None:
         client = Client.default_client()

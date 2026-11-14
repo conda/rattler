@@ -9,8 +9,10 @@ use rattler_conda_types::{
 };
 use rattler_digest::{Sha256, Sha256Hash};
 use rattler_sigstore::{
-    ChannelCheck, Issuer, Publisher, SigstoreError, TrustedRoot, VerificationConfig,
-    VerificationPolicy, fetch_sidecar, verify_bundles, verify_record_with_trusted_root,
+    ChannelCheck, GitHubTrustDomain, Issuer, Publisher, SigstoreError, TrustedRoot, TrustedRoots,
+    VerificationConfig, VerificationPolicy, fetch_sidecar, verify_bundles,
+    verify_bundles_with_trusted_roots, verify_record_with_trusted_root,
+    verify_record_with_trusted_roots,
 };
 use reqwest_middleware::ClientWithMiddleware;
 use sigstore_verify::trust_root::SigstoreInstance;
@@ -471,4 +473,319 @@ async fn verify_record_end_to_end() {
             .await
             .unwrap();
     assert!(!outcome.is_verified());
+}
+
+/// A bundle signed by GitHub's artifact attestation instance: it carries an
+/// RFC 3161 timestamp from GitHub's TSA instead of a transparency log entry.
+/// It is one of GitHub's own immutable release attestations, signed for the
+/// identity `https://dotcom.releases.github.com` without an OIDC issuer rather
+/// than by a GitHub Actions workflow, so it passes Sigstore verification but
+/// must not be accepted as a publisher's attestation.
+const GITHUB_PRIVATE_BUNDLE: &str =
+    include_str!("../test-data/github-private-attestation.sigstore.json");
+const GITHUB_PRIVATE_SUBJECT_SHA256: &str =
+    "76f1fe8593bf227cca2c089e3c16dc95014a8d3e89c5dd220530469ca043c428";
+
+#[test]
+fn bundles_without_a_transparency_log_need_the_github_root() {
+    let channel = Url::parse("https://prefix.dev/private-channel/").unwrap();
+    let mut record = record(&channel, None);
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_PRIVATE_SUBJECT_SHA256).unwrap(),
+    );
+    let bundles =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_PRIVATE_BUNDLE}]").as_bytes())
+            .unwrap();
+    let public_good = trusted_root();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+
+    // Only trusting the public-good instance rejects the bundle before any
+    // Sigstore verification, because it has no transparency log entry.
+    let result = verify_bundles(&record, &bundles, ChannelCheck::Require, &public_good).unwrap();
+    assert!(result.verified.is_empty());
+    assert!(
+        result.rejected[0]
+            .reason
+            .contains("no transparency log entry"),
+        "{}",
+        result.rejected[0].reason
+    );
+
+    // With GitHub's root the Sigstore layer passes (signature, certificate
+    // chain to GitHub's Fulcio, GitHub TSA timestamp), but GitHub's instance
+    // is only trusted for GitHub Actions identities.
+    let roots =
+        TrustedRoots::new(&public_good).with_github(GitHubTrustDomain::github_com(), &github);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots.clone())
+            .unwrap();
+    assert!(result.verified.is_empty());
+    let reason = &result.rejected[0].reason;
+    assert!(!reason.contains("sigstore verification failed"), "{reason}");
+    assert!(
+        reason.contains("only trusted for GitHub Actions identities"),
+        "{reason}"
+    );
+
+    // A different artifact digest fails the Sigstore layer itself.
+    let mut other = record.clone();
+    other.package_record.sha256 =
+        Some(rattler_digest::parse_digest_from_hex::<Sha256>(PACKAGE_SHA256).unwrap());
+    let result =
+        verify_bundles_with_trusted_roots(&other, &bundles, ChannelCheck::Require, roots).unwrap();
+    assert!(
+        result.rejected[0]
+            .reason
+            .contains("sigstore verification failed"),
+        "{}",
+        result.rejected[0].reason
+    );
+}
+
+#[test]
+fn bundles_without_a_transparency_log_try_every_github_root() {
+    let channel = Url::parse("https://prefix.dev/private-channel/").unwrap();
+    let mut record = record(&channel, None);
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_PRIVATE_SUBJECT_SHA256).unwrap(),
+    );
+    let bundles =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_PRIVATE_BUNDLE}]").as_bytes())
+            .unwrap();
+    let public_good = trusted_root();
+    // Stands in for the root of a GitHub Enterprise Cloud region, which did
+    // not sign the bundle.
+    let region = TrustedRoot::from_embedded(SigstoreInstance::Staging).unwrap();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+
+    // The root that does not issue the certificate fails Sigstore
+    // verification, the github.com root passes it and reaches the GitHub
+    // Actions identity check. Both reasons are reported.
+    let roots = TrustedRoots::new(&public_good)
+        .with_github(GitHubTrustDomain::region("prod-weu-01").unwrap(), &region)
+        .with_github(GitHubTrustDomain::github_com(), &github);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots).unwrap();
+    assert!(result.verified.is_empty());
+    let reason = &result.rejected[0].reason;
+    assert!(reason.contains("sigstore verification failed"), "{reason}");
+    assert!(
+        reason.contains("GitHub instance of prod-weu-01: sigstore verification failed"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("GitHub instance of github.com: the bundle was signed by the GitHub"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("only trusted for GitHub Actions identities"),
+        "{reason}"
+    );
+}
+
+/// A trusted root that cannot be used: its certificate authority is not a
+/// certificate.
+fn unusable_root() -> TrustedRoot {
+    TrustedRoot::from_json(
+        r#"{
+            "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+            "tlogs": [],
+            "certificateAuthorities": [{
+                "subject": {"organization": "example", "commonName": "example"},
+                "uri": "https://fulcio.example.com",
+                "certChain": {"certificates": [{"rawBytes": "bm90IGEgY2VydGlmaWNhdGU="}]},
+                "validFor": {"start": "2020-01-01T00:00:00Z"}
+            }],
+            "ctlogs": [],
+            "timestampAuthorities": []
+        }"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_unusable_github_root_only_affects_the_bundles_that_need_it() {
+    let channel = Url::parse("https://prefix.dev/github-releases/").unwrap();
+    let record = record(&channel, Some(sidecar_hash()));
+    let logged = rattler_sigstore::parse_sidecar(&record.url, SIDECAR, &sidecar_hash())
+        .unwrap()
+        .bundles;
+    let log_less =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_PRIVATE_BUNDLE}]").as_bytes())
+            .unwrap();
+    let bundles = [logged, log_less].concat();
+
+    let public_good = trusted_root();
+    let unusable = unusable_root();
+    let region = GitHubTrustDomain::region("prod-weu-01").unwrap();
+    let unavailable = GitHubTrustDomain::region("prod-eus-01").unwrap();
+    let roots = TrustedRoots::new(&public_good)
+        .with_github(region, &unusable)
+        .with_unavailable_github(unavailable, "tuf-repo.github.com could not be reached");
+    let result =
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots).unwrap();
+
+    // The public-good bundle still verifies.
+    assert_eq!(result.verified.len(), 1, "{:?}", result.rejected);
+    assert_eq!(result.verified[0].index, 0);
+
+    // The bundle without a log entry names both roots that could not be used.
+    assert_eq!(result.rejected.len(), 1);
+    let reason = &result.rejected[0].reason;
+    assert!(
+        reason.contains("GitHub instance of prod-weu-01: the trusted root could not be loaded"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains(
+            "GitHub instance of prod-eus-01: the trusted root could not be loaded: \
+             tuf-repo.github.com could not be reached"
+        ),
+        "{reason}"
+    );
+}
+
+#[test]
+fn a_github_root_with_a_transparency_log_verifies_logged_bundles() {
+    let channel = Url::parse("https://prefix.dev/github-releases/").unwrap();
+    let record = record(&channel, Some(sidecar_hash()));
+    let sidecar = rattler_sigstore::parse_sidecar(&record.url, SIDECAR, &sidecar_hash()).unwrap();
+
+    // The public-good root stands in for the root of a GitHub instance that
+    // keeps a transparency log, and the staging root for a public-good root
+    // that did not sign the bundle.
+    let other = TrustedRoot::from_embedded(SigstoreInstance::Staging).unwrap();
+    let with_log = trusted_root();
+    let roots = TrustedRoots::new(&other).with_github(GitHubTrustDomain::github_com(), &with_log);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &sidecar.bundles, ChannelCheck::Require, roots)
+            .unwrap();
+    assert!(result.rejected.is_empty(), "{:?}", result.rejected);
+    let attestation = &result.verified[0];
+    assert_eq!(attestation.instance, SigstoreInstance::GitHub);
+    // The log is not skipped for a root that lists one.
+    assert!(attestation.checks.transparency_log);
+    assert!(attestation.checks.signed_certificate_timestamp);
+
+    // A GitHub root without a log is not tried for a bundle with a log entry.
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+    let roots = TrustedRoots::new(&other).with_github(GitHubTrustDomain::github_com(), &github);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &sidecar.bundles, ChannelCheck::Require, roots)
+            .unwrap();
+    assert!(result.verified.is_empty());
+    assert!(
+        !result.rejected[0].reason.contains("GitHub instance"),
+        "{}",
+        result.rejected[0].reason
+    );
+}
+
+/// An attestation `actions/attest` made with GitHub's instance on github.com,
+/// for the `attest-demo` workflow of the `actions` organization. It comes from
+/// the GitHub CLI's test data
+/// (`pkg/cmd/attestation/test/data/github_provenance_demo-0.0.12-py3-none-any-bundle.jsonl`,
+/// MIT licensed) and attests a Python wheel, not a conda package, so it always
+/// fails the CEP 27 statement checks, which run after the identity checks.
+const GITHUB_ACTIONS_BUNDLE: &str =
+    include_str!("../test-data/github-actions-private-attestation.sigstore.json");
+const GITHUB_ACTIONS_SUBJECT_SHA256: &str =
+    "ae57936def59bc4c75edd3a837d89bcefc6d3a5e31d55a6fa7a71624f92c3c3b";
+
+#[test]
+fn github_roots_only_vouch_for_their_own_trust_domain() {
+    let channel = Url::parse("https://prefix.dev/private-channel/").unwrap();
+    let mut record = record(&channel, None);
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_ACTIONS_SUBJECT_SHA256).unwrap(),
+    );
+    let bundles =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_ACTIONS_BUNDLE}]").as_bytes())
+            .unwrap();
+    let public_good = trusted_root();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+    let reason = |trust_domain: GitHubTrustDomain| {
+        let roots = TrustedRoots::new(&public_good).with_github(trust_domain, &github);
+        let result =
+            verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Ignore, roots)
+                .unwrap();
+        assert!(result.verified.is_empty());
+        result.rejected[0].reason.clone()
+    };
+
+    // As github.com's root, the bundle passes Sigstore verification and the
+    // identity check, and only fails on its non-conda statement.
+    let as_github_com = reason(GitHubTrustDomain::github_com());
+    assert!(
+        !as_github_com.contains("sigstore verification failed")
+            && !as_github_com.contains("only trusted for"),
+        "{as_github_com}"
+    );
+    assert!(as_github_com.contains("statement"), "{as_github_com}");
+
+    // A region's root must not vouch for a github.com workflow.
+    let as_region = reason(GitHubTrustDomain::region("prod-weu-01").unwrap());
+    assert!(
+        as_region.contains(
+            "only trusted for GitHub Actions identities of GitHub Enterprise Cloud tenants"
+        ),
+        "{as_region}"
+    );
+}
+
+/// Verifies `record` with `roots` and returns why it was rejected.
+///
+/// The configured trust domains only select what `verify_record` fetches;
+/// explicitly passed roots are used as they are, and none are configured by
+/// default.
+async fn rejection_reasons(record: &RepoDataRecord, roots: TrustedRoots<'_>) -> Vec<String> {
+    let config = VerificationConfig::new(Publisher::new());
+    match verify_record_with_trusted_roots(
+        &VerificationPolicy::Require(config),
+        record,
+        &client(),
+        roots,
+    )
+    .await
+    {
+        Err(SigstoreError::VerificationFailed { reasons, .. }) => reasons,
+        other => panic!("unexpected outcome: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn explicit_trusted_roots_decide_which_github_instances_are_trusted() {
+    let dir = tempfile::tempdir().unwrap();
+    let sidecar = format!("[{GITHUB_PRIVATE_BUNDLE}]");
+    let subdir = dir.path().join("channel").join("osx-arm64");
+    std::fs::create_dir_all(&subdir).unwrap();
+    let sidecar_hash = rattler_digest::compute_bytes_digest::<Sha256>(sidecar.as_bytes());
+    std::fs::write(
+        subdir.join(format!("{PACKAGE}.sigs.{}", hex::encode(sidecar_hash))),
+        &sidecar,
+    )
+    .unwrap();
+    let channel = serve(dir.path()).await;
+    let mut record = record(&channel, Some(sidecar_hash));
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_PRIVATE_SUBJECT_SHA256).unwrap(),
+    );
+
+    let public_good = trusted_root();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+    let with_github = rejection_reasons(
+        &record,
+        TrustedRoots::new(&public_good).with_github(GitHubTrustDomain::github_com(), &github),
+    )
+    .await;
+    assert!(
+        with_github[0].contains("only trusted for GitHub Actions identities"),
+        "{with_github:?}"
+    );
+
+    let without_github = rejection_reasons(&record, TrustedRoots::new(&public_good)).await;
+    assert!(
+        without_github[0].contains("no transparency log entry"),
+        "{without_github:?}"
+    );
 }
