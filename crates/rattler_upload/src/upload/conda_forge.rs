@@ -7,7 +7,10 @@ use std::{
 
 use crate::{
     CondaForgeData,
-    upload::{get_default_client, opt::ForceOverwrite},
+    upload::{
+        get_default_client,
+        opt::{ForceOverwrite, SkipExisting},
+    },
 };
 use fs_err::tokio as fs;
 use miette::{IntoDiagnostic, miette};
@@ -98,6 +101,7 @@ pub async fn upload_packages_to_conda_forge(
                     &conda_forge_data.staging_channel,
                     std::slice::from_ref(&channel),
                     ForceOverwrite(false),
+                    SkipExisting(false),
                     &package,
                 )
                 .await?;
