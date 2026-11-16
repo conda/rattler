@@ -1,4 +1,8 @@
+//! Exercise `OpenDAL`'s actual S3 HTTP requests: a seekable in-memory backend cannot
+//! reveal offset-to-EOF downloads, missing `If-Match` headers, or excessive range requests.
+
 use super::*;
+use axum::serve as serve_http;
 use axum::{
     Router,
     body::Body,
@@ -6,7 +10,12 @@ use axum::{
     http::{Method, Request, Response, StatusCode, header},
 };
 use bytes::Bytes;
-use std::sync::{Mutex, atomic::AtomicUsize};
+use rattler_s3::{ResolvedS3Credentials, S3AddressingStyle, S3CredentialSource};
+use std::{
+    convert::Infallible,
+    sync::{Mutex, atomic::AtomicUsize},
+};
+use tokio::{net::TcpListener, task::JoinSet};
 
 #[derive(Clone, Debug)]
 struct Read {
@@ -23,6 +32,9 @@ struct Server {
     reads: Arc<Mutex<Vec<Read>>>,
 }
 
+/// Count bytes actually emitted, not only requested ranges, to catch read-ahead that
+/// would silently defeat the memory and transfer savings. A fixed `ETag` makes every
+/// request condition observable without needing credentials or an external S3 server.
 async fn serve(State(state): State<Server>, request: Request<Body>) -> Response<Body> {
     let length = state.bytes.len();
     if request.method() == Method::HEAD {
@@ -84,7 +96,7 @@ async fn serve(State(state): State<Server>, request: Request<Body>) -> Response<
         move |offset| {
             let chunk = state.bytes.slice(offset..(offset + 16 * 1024).min(end));
             sent.fetch_add(chunk.len(), Ordering::SeqCst);
-            Ok::<_, std::convert::Infallible>(chunk)
+            Ok::<_, Infallible>(chunk)
         },
     )));
     let mut response = Response::builder()
@@ -99,15 +111,16 @@ async fn serve(State(state): State<Server>, request: Request<Body>) -> Response<
     response.body(body).unwrap()
 }
 
+/// The payload must be downloaded once for hashing. Metadata lookups may add only
+/// bounded, version-guarded ranges regardless of where the info component appears.
 #[tokio::test]
 async fn s3_metadata_requests_are_bounded_and_transfer_only_small_ranges() {
     for info_first in [false, true] {
         // A large stored payload exposes an accidental second offset..EOF GET.
         let bytes = fixture_with_payload("1.0", info_first, true, &vec![0; 4 * 1024 * 1024]);
-        let expected =
-            crate::indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+        let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
         let (info_start, info_end) = {
-            let mut zip = zip::ZipArchive::new(Cursor::new(&bytes)).unwrap();
+            let mut zip = ZipArchive::new(Cursor::new(&bytes)).unwrap();
             let info = zip.by_name("info-test.tar.zst").unwrap();
             let start = info.data_start().unwrap() as usize;
             (start, start + info.compressed_size() as usize)
@@ -118,36 +131,37 @@ async fn s3_metadata_requests_are_bounded_and_transfer_only_small_ranges() {
             reads: reads.clone(),
         };
         let size = state.bytes.len();
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
-        let mut server = tokio::task::JoinSet::new();
+        let mut server = JoinSet::new();
         server.spawn(async move {
-            axum::serve(listener, Router::new().fallback(serve).with_state(state))
+            serve_http(listener, Router::new().fallback(serve).with_state(state))
                 .await
                 .unwrap();
         });
-        let credentials = rattler_s3::ResolvedS3Credentials {
+        let credentials = ResolvedS3Credentials {
             endpoint_url: endpoint.parse().unwrap(),
             region: "us-east-1".to_owned(),
-            addressing_style: rattler_s3::S3AddressingStyle::Path,
+            addressing_style: S3AddressingStyle::Path,
             access_key_id: "test".to_owned(),
             secret_access_key: "test".to_owned(),
             session_token: None,
         };
-        let op = rattler_s3::S3CredentialSource::from(credentials)
+        let op = S3CredentialSource::from(credentials)
             .opendal_operator("test", "")
             .unwrap();
         let metadata = RepodataFileMetadata::new(&op, "test.conda", PreconditionChecks::Enabled)
             .await
             .unwrap();
-        let actual = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+        let actual = timeout(
+            Duration::from_secs(5),
             read_package(&op, "test.conda", &metadata),
         )
         .await
         .unwrap()
         .unwrap();
         assert_records_match(&actual, &expected);
+        // A parser seek must not turn into another payload-sized HTTP response.
         let reads = reads.lock().unwrap();
         assert_eq!((reads[0].start, reads[0].end), (0, size));
         assert!(reads.len() <= 12, "excessive serial GETs: {reads:?}");
@@ -157,6 +171,7 @@ async fn s3_metadata_requests_are_bounded_and_transfer_only_small_ranges() {
             assert!(read.end - read.start <= 64 * 1024);
             assert_eq!(read.sent.load(Ordering::SeqCst), read.end - read.start);
         }
+        // Metadata and digests are only interchangeable if every GET guards the same object.
         assert!(
             reads
                 .iter()

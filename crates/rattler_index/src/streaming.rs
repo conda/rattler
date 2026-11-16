@@ -1,19 +1,40 @@
-use std::io;
+//! Read `.conda` records without retaining the payload when object identity is available.
+//! Unversioned storage and unsupported ZIP layouts use a single buffered snapshot.
+
+use std::{
+    error::Error as StdError,
+    io::{self, Write},
+};
 
 use async_zip::{Compression, base::read::seek::ZipFileReader, error::ZipError};
 use bytes::Buf;
 use futures::{AsyncBufReadExt, AsyncSeekExt};
-use opendal::{Buffer, Error, ErrorKind, Operator, Reader, options::ReaderOptions};
-use rattler_digest::{Md5, Sha256};
-use sha2::Digest;
+use opendal::{Buffer, BufferCursor, Error, ErrorKind, Operator, Reader, options::ReaderOptions};
+use rattler_digest::{HashingWriter, Md5, Sha256};
+use rattler_package_streaming::seek::stream_conda_info;
+use tar::Archive;
+use tokio::task::{consume_budget, spawn_blocking};
+use zstd::stream::read::Decoder;
 
-use crate::{IndexedPackageRecord, RepodataFileMetadata};
+use crate::{
+    IndexedPackageRecord, RepodataFileMetadata, read_indexed_json_from_archive,
+    utils::read_with_metadata_check,
+};
 
 // Bound ZIP-directory/header requests; the archive hash uses one continuous GET.
 const METADATA_CHUNK: usize = 64 * 1024;
 
-/// Hash and read metadata from the same guarded object version. Only in-memory
-/// hashing/parsing runs on the blocking pool, so storage I/O remains cancellable.
+/// Return metadata and whole-archive digests suitable for a repodata record.
+///
+/// With an `ETag`, one sequential read hashes the archive and bounded range reads
+/// fetch its info component. Every read uses the same version condition; callers
+/// must retry the entire operation on `ConditionNotMatch`. If conditions are
+/// disabled, a final stat detects replacement before the record can be cached.
+///
+/// Storage without `ETags` uses one immutable snapshot because timestamps cannot
+/// establish consistency across separate reads. ZIP layouts rejected by the
+/// range parser also use that compatibility path. Storage I/O remains async and
+/// cancellable; synchronous parsing and buffered hashing use the blocking pool.
 pub(crate) async fn read_package(
     op: &Operator,
     path: &str,
@@ -30,7 +51,8 @@ pub(crate) async fn read_package(
     }
     let reader = op.reader_options(path, options.clone()).await?;
     let mut source = reader.clone().into_futures_async_read(..).await?;
-    let (mut md5, mut sha256, mut size) = (Md5::new(), Sha256::new(), 0u64);
+    let mut hashes = HashingWriter::<_, Md5>::new(HashingWriter::<_, Sha256>::new(io::sink()));
+    let mut size = 0u64;
     loop {
         let chunk = source.fill_buf().await.map_err(storage_error)?;
         if chunk.is_empty() {
@@ -38,13 +60,14 @@ pub(crate) async fn read_package(
         }
         // Keep hashing work bounded per budget unit, even for whole-archive buffers.
         let chunk = &chunk[..chunk.len().min(8 * 1024)];
-        md5.update(chunk);
-        sha256.update(chunk);
+        hashes.write_all(chunk).map_err(storage_error)?;
         let length = chunk.len();
         size += length as u64;
         source.consume_unpin(length);
-        tokio::task::consume_budget().await;
+        consume_budget().await;
     }
+    let (sha256, md5) = hashes.finalize();
+    let (_, sha256) = sha256.finalize();
 
     options.chunk = Some(METADATA_CHUNK);
     options.concurrent = 1;
@@ -57,15 +80,15 @@ pub(crate) async fn read_package(
         }
         Err(error) => return Err(error),
     };
-    let mut indexed = tokio::task::spawn_blocking(move || {
-        let decoder = zstd::stream::read::Decoder::new(info.reader())?;
-        crate::read_indexed_json_from_archive(None, &mut tar::Archive::new(decoder))
+    let mut indexed = spawn_blocking(move || {
+        let decoder = Decoder::new(info.reader())?;
+        read_indexed_json_from_archive(None, &mut Archive::new(decoder))
     })
     .await
     .map_err(|error| Error::new(ErrorKind::Unexpected, "metadata worker failed").set_source(error))?
     .map_err(storage_error)?;
-    indexed.record.md5 = Some(md5.finalize());
-    indexed.record.sha256 = Some(sha256.finalize());
+    indexed.record.md5 = Some(md5);
+    indexed.record.sha256 = Some(sha256);
     indexed.record.size = Some(size);
 
     if !metadata.precondition_checks.is_enabled() {
@@ -81,6 +104,8 @@ pub(crate) async fn read_package(
     Ok(indexed)
 }
 
+/// Distinguish unsupported ZIP layouts from storage failures so only format
+/// incompatibility falls back to buffering; replacement errors must reach retries.
 fn zip_error(error: ZipError) -> Error {
     match error {
         ZipError::UpstreamReadError(error) => storage_error(error),
@@ -89,6 +114,9 @@ fn zip_error(error: ZipError) -> Error {
     }
 }
 
+/// Locate the info component through the central directory and fetch only its
+/// compressed bytes. A separately chunked reader keeps ZIP seeks from requesting
+/// the rest of a large payload; the hash reader retains its one sequential GET.
 async fn metadata_bytes(reader: &Reader, directory: Reader, size: u64) -> opendal::Result<Buffer> {
     let source = directory.into_futures_async_read(0..size).await?;
     let mut archive = ZipFileReader::new(source).await.map_err(zip_error)?;
@@ -126,13 +154,16 @@ async fn metadata_bytes(reader: &Reader, directory: Reader, size: u64) -> openda
     reader.read(start..start + length).await
 }
 
+/// Preserve the legacy single-snapshot guarantee when separate guarded reads
+/// are unavailable. Finish I/O before spawning CPU work to avoid blocking-pool
+/// deadlocks on filesystem backends that also use that pool.
 async fn buffered_record(
     op: &Operator,
     path: &str,
     metadata: &RepodataFileMetadata,
 ) -> opendal::Result<IndexedPackageRecord> {
-    let buffer = crate::utils::read_with_metadata_check(op, path, metadata).await?;
-    tokio::task::spawn_blocking(move || buffered_snapshot(buffer))
+    let buffer = read_with_metadata_check(op, path, metadata).await?;
+    spawn_blocking(move || buffered_snapshot(buffer))
         .await
         .map_err(|error| {
             Error::new(ErrorKind::Unexpected, "metadata worker failed").set_source(error)
@@ -140,29 +171,28 @@ async fn buffered_record(
         .map_err(storage_error)
 }
 
+/// Hash and parse one immutable buffer without coalescing its segments into
+/// another archive-sized allocation. The seek parser preserves legacy ZIP support.
 fn buffered_snapshot(buffer: Buffer) -> io::Result<IndexedPackageRecord> {
-    // Keep one immutable snapshot without coalescing segmented storage into a
-    // second archive-sized allocation, including on timestamp-only filesystems.
-    let (mut md5, mut sha256) = (Md5::new(), Sha256::new());
+    let mut hashes = HashingWriter::<_, Md5>::new(HashingWriter::<_, Sha256>::new(io::sink()));
     for chunk in buffer.clone() {
-        md5.update(&chunk);
-        sha256.update(&chunk);
+        hashes.write_all(&chunk)?;
     }
+    let (sha256, md5) = hashes.finalize();
+    let (_, sha256) = sha256.finalize();
     let size = buffer.len() as u64;
-    let mut archive =
-        rattler_package_streaming::seek::stream_conda_info(opendal::BufferCursor::new(buffer))
-            .map_err(io::Error::other)?;
-    let mut indexed = crate::read_indexed_json_from_archive(None, &mut archive)?;
-    indexed.record.md5 = Some(md5.finalize());
-    indexed.record.sha256 = Some(sha256.finalize());
+    let mut archive = stream_conda_info(BufferCursor::new(buffer)).map_err(io::Error::other)?;
+    let mut indexed = read_indexed_json_from_archive(None, &mut archive)?;
+    indexed.record.md5 = Some(md5);
+    indexed.record.sha256 = Some(sha256);
     indexed.record.size = Some(size);
     Ok(indexed)
 }
 
-// Later range requests may detect replacement; preserve their storage error
-// kind through I/O wrappers so the retry loop rereads the whole record.
+/// Preserve storage error kinds through ZIP/I/O wrappers so a replacement during
+/// a later range request retries the whole record instead of becoming a parse error.
 fn storage_error(error: io::Error) -> Error {
-    let mut source: &(dyn std::error::Error + 'static) = &error;
+    let mut source: &(dyn StdError + 'static) = &error;
     let kind = loop {
         if let Some(storage) = source.downcast_ref::<Error>() {
             break storage.kind();
@@ -170,7 +200,7 @@ fn storage_error(error: io::Error) -> Error {
         let nested = source
             .downcast_ref::<io::Error>()
             .and_then(io::Error::get_ref)
-            .map(|inner| inner as &(dyn std::error::Error + 'static));
+            .map(|inner| inner as &(dyn StdError + 'static));
         match nested.or_else(|| source.source()) {
             Some(next) => source = next,
             None => break ErrorKind::Unexpected,

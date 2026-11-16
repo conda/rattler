@@ -8,14 +8,17 @@
 //! with any `OpenDAL` backend, using conditional reads when supported (S3, HTTP) or simple
 //! reads as fallback (filesystem).
 
-use std::{sync::Arc, time::SystemTime};
+use std::{future::Future, sync::Arc, time::SystemTime};
 
-use opendal::{Operator, raw::Timestamp};
+use opendal::{Buffer, Error, ErrorKind, Operator, raw::Timestamp};
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
 use tokio::sync::RwLock;
 
-use crate::{IndexedPackageRecord, RepodataFileMetadata};
+use crate::{
+    IndexedPackageRecord, PreconditionChecks, RepodataFileMetadata, parse_package_buffer,
+    streaming::read_package, utils::read_with_metadata_check,
+};
 
 /// A cached package record with its associated metadata for validation.
 #[derive(Debug, Clone)]
@@ -180,19 +183,20 @@ impl PackageRecordCache {
 /// Returns `(buffer, final_metadata)` where `final_metadata` reflects the version actually
 /// read (may differ from `initial_metadata` if retries occurred).
 ///
-/// [`ErrorKind::ConditionNotMatch`]: opendal::ErrorKind::ConditionNotMatch
-/// [`ErrorKind::Unsupported`]: opendal::ErrorKind::Unsupported
 pub async fn read_package_with_retry(
     op: &Operator,
     path: &str,
     initial_metadata: RepodataFileMetadata,
-) -> opendal::Result<(opendal::Buffer, RepodataFileMetadata)> {
+) -> opendal::Result<(Buffer, RepodataFileMetadata)> {
     read_with_retry(op, path, initial_metadata, |metadata| async move {
-        crate::utils::read_with_metadata_check(op, path, &metadata).await
+        read_with_metadata_check(op, path, &metadata).await
     })
     .await
 }
 
+/// Keep the parsed record and its cache identity on the same archive version.
+/// `.conda` reads can stream; other formats retain their existing buffer parser.
+/// Retrying the entire operation prevents combining old hashes with new metadata.
 pub(crate) async fn read_package_record_with_retry(
     op: &Operator,
     path: &str,
@@ -200,18 +204,20 @@ pub(crate) async fn read_package_record_with_retry(
 ) -> opendal::Result<(IndexedPackageRecord, RepodataFileMetadata)> {
     read_with_retry(op, path, initial_metadata, |metadata| async move {
         if path.ends_with(".conda") {
-            crate::streaming::read_package(op, path, &metadata).await
+            read_package(op, path, &metadata).await
         } else {
-            let buffer = crate::utils::read_with_metadata_check(op, path, &metadata).await?;
-            crate::parse_package_buffer(buffer, path).map_err(|error| {
-                opendal::Error::new(opendal::ErrorKind::Unexpected, "could not parse package")
-                    .set_source(error)
+            let buffer = read_with_metadata_check(op, path, &metadata).await?;
+            parse_package_buffer(buffer, path).map_err(|error| {
+                Error::new(ErrorKind::Unexpected, "could not parse package").set_source(error)
             })
         }
     })
     .await
 }
 
+/// Share replacement backoff between the public buffer reader and indexing.
+/// Disabling unsupported request conditions must preserve replacement retries:
+/// a multi-read operation can still detect a changed `ETag` after reading.
 async fn read_with_retry<T, Fut>(
     op: &Operator,
     path: &str,
@@ -219,7 +225,7 @@ async fn read_with_retry<T, Fut>(
     read: impl Fn(RepodataFileMetadata) -> Fut,
 ) -> opendal::Result<(T, RepodataFileMetadata)>
 where
-    Fut: std::future::Future<Output = opendal::Result<T>>,
+    Fut: Future<Output = opendal::Result<T>>,
 {
     let retry_policy = default_retry_policy();
     let mut current_try = 0;
@@ -231,11 +237,11 @@ where
 
         let mut attempt = metadata.clone();
         if !use_conditions {
-            attempt.precondition_checks = crate::PreconditionChecks::Disabled;
+            attempt.precondition_checks = PreconditionChecks::Disabled;
         }
         match read(attempt).await {
             Ok(result) => return Ok((result, metadata)),
-            Err(e) if e.kind() == opendal::ErrorKind::Unsupported && use_conditions => {
+            Err(e) if e.kind() == ErrorKind::Unsupported && use_conditions => {
                 // Unsupported request conditions must not bypass retries when
                 // the unconditional hash/metadata attempt detects a replacement.
                 tracing::debug!(
@@ -244,7 +250,7 @@ where
                 );
                 use_conditions = false;
             }
-            Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
+            Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
                 // File changed - check if we should retry
                 match retry_policy.should_retry(request_start_time, current_try) {
                     RetryDecision::Retry { execute_after } => {
@@ -266,7 +272,7 @@ where
                             etag: fresh_metadata.etag().map(str::to_owned),
                             last_modified: fresh_metadata.last_modified(),
                             file_existed: true,
-                            precondition_checks: crate::PreconditionChecks::Enabled,
+                            precondition_checks: PreconditionChecks::Enabled,
                         };
                         // Loop continues to next iteration with fresh metadata
                     }

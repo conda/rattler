@@ -277,12 +277,12 @@ async fn patch_transitions_preserve_publication_history_including_legacy_missing
 /// retries must use its publication time even when reusing cached archive data.
 #[tokio::test]
 async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
-    use super::etag_memory_backend::{ETagMemoryBuilder, Operation, TestHooks};
     use opendal::Operator;
     use std::sync::{
         Arc, OnceLock,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     };
+    use tools::etag_memory_backend::{ETagMemoryBuilder, Operation, TestHooks};
 
     let temp = tempfile::tempdir().unwrap();
     let filename = archive(temp.path(), true, false);

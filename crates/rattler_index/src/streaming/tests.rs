@@ -1,46 +1,65 @@
+//! Compare the new read paths with the legacy parser, including archive layouts
+//! and storage races that ordinary filesystem indexing does not exercise.
+
 use super::*;
 #[cfg(feature = "s3")]
 mod http;
 use crate::{
-    PreconditionChecks,
-    streaming_test_backend::{ETagMemoryBuilder, Operation, TestHooks},
+    PreconditionChecks, cache::read_package_record_with_retry,
+    indexed_package_record_from_conda_reader,
 };
-use opendal::Configurator;
+use opendal::{Configurator, services::FsConfig};
+use serde_json::{json, to_value};
 use std::{
-    io::{Cursor, Write},
+    fs,
+    io::{Cursor, Read, Write},
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
+    time::Duration,
 };
+use tar::{Builder as TarBuilder, Header};
+use tempfile::tempdir;
+use tokio::{
+    runtime::Builder as RuntimeBuilder,
+    spawn,
+    sync::{Notify, OnceCell},
+    time::timeout,
+};
+use tools::etag_memory_backend::{ETagMemoryBuilder, Operation, TestHooks};
+use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
+use zstd::stream::encode_all;
 
+/// Keep both metadata files in the fixture so equality checks catch lost run exports.
 fn fixture(version: &str, info_first: bool, zip64: bool) -> Vec<u8> {
     fixture_with_payload(version, info_first, zip64, &[])
 }
 
+/// ZIP order, `Zip64` headers and the footer expose parser and whole-archive hash regressions.
 fn fixture_with_payload(version: &str, info_first: bool, zip64: bool, payload: &[u8]) -> Vec<u8> {
-    let index = serde_json::json!({
+    let index = json!({
         "name": "streaming-test", "version": version, "build": "0",
         "build_number": 0, "subdir": "noarch", "depends": ["python >=3.10"],
     })
     .to_string();
     let exports = r#"{"weak":["streaming-test >=1.0"]}"#;
-    let mut tar = tar::Builder::new(Vec::new());
+    let mut tar = TarBuilder::new(Vec::new());
     for (path, content) in [
         ("info/run_exports.json", exports),
         ("info/index.json", index.as_str()),
     ] {
-        let mut header = tar::Header::new_gnu();
+        let mut header = Header::new_gnu();
         header.set_size(content.len() as u64);
         header.set_mode(0o644);
         header.set_cksum();
         tar.append_data(&mut header, path, content.as_bytes())
             .unwrap();
     }
-    let info = zstd::stream::encode_all(Cursor::new(tar.into_inner().unwrap()), 1).unwrap();
-    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored)
+    let info = encode_all(Cursor::new(tar.into_inner().unwrap()), 1).unwrap();
+    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Stored)
         .large_file(zip64);
     let mut entries = vec![
         ("info-test.tar.zst", info),
@@ -58,14 +77,16 @@ fn fixture_with_payload(version: &str, info_first: bool, zip64: bool, payload: &
     zip.finish().unwrap().into_inner()
 }
 
+/// The legacy parser is the compatibility oracle; compare every published record field.
 #[track_caller]
 fn assert_records_match(actual: &IndexedPackageRecord, expected: &IndexedPackageRecord) {
     assert_eq!(
-        serde_json::to_value(&actual.record).unwrap(),
-        serde_json::to_value(&expected.record).unwrap()
+        to_value(&actual.record).unwrap(),
+        to_value(&expected.record).unwrap()
     );
 }
 
+/// Capture the pre-read identity so race tests can distinguish a successful retry from stale data.
 async fn operator_with_archive(
     builder: ETagMemoryBuilder,
     bytes: Vec<u8>,
@@ -78,6 +99,8 @@ async fn operator_with_archive(
     (op, metadata)
 }
 
+/// Inject a deterministic replacement at a read boundary without timing-dependent sleeps.
+/// The shared cell lets the backend hook write through the completed operator.
 async fn replace_archive_on_read(
     builder: ETagMemoryBuilder,
     initial: Vec<u8>,
@@ -85,7 +108,7 @@ async fn replace_archive_on_read(
     trigger: (Operation, usize),
 ) -> (Operator, RepodataFileMetadata, Arc<AtomicUsize>) {
     let reads = Arc::new(AtomicUsize::new(0));
-    let operator = Arc::new(tokio::sync::OnceCell::<Operator>::new());
+    let operator = Arc::new(OnceCell::<Operator>::new());
     let hooks = TestHooks {
         on_operation: Arc::new({
             let operator = operator.clone();
@@ -114,23 +137,23 @@ async fn replace_archive_on_read(
     (op, metadata, reads)
 }
 
+/// Guard against hashing only the info component or depending on its ZIP position.
 #[tokio::test]
 async fn metadata_and_full_archive_hashes_match_for_both_orders_and_zip64() {
     for info_first in [false, true] {
         for zip64 in [false, true] {
             let bytes = fixture("1.0", info_first, zip64);
-            let expected =
-                crate::indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+            let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
             let (op, metadata) = operator_with_archive(ETagMemoryBuilder::default(), bytes).await;
-            let (actual, _) =
-                crate::cache::read_package_record_with_retry(&op, "test.conda", metadata)
-                    .await
-                    .unwrap();
+            let (actual, _) = read_package_record_with_retry(&op, "test.conda", metadata)
+                .await
+                .unwrap();
             assert_records_match(&actual, &expected);
         }
     }
 }
 
+/// ZIP readers disagree on duplicate names; preserve the legacy selection on the range path.
 #[tokio::test]
 async fn duplicate_info_names_match_legacy_selection() {
     for duplicate_last in [false, true] {
@@ -142,10 +165,10 @@ async fn duplicate_info_names_match_legacy_selection() {
         if duplicate_last {
             entries.swap(1, 2);
         }
-        let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let mut output = ZipWriter::new(Cursor::new(Vec::new()));
         for (name, version) in entries {
             let source = fixture(version, true, false);
-            let mut zip = zip::ZipArchive::new(Cursor::new(source)).unwrap();
+            let mut zip = ZipArchive::new(Cursor::new(source)).unwrap();
             output
                 .raw_copy_file_rename(zip.by_name("info-test.tar.zst").unwrap(), name)
                 .unwrap();
@@ -161,8 +184,7 @@ async fn duplicate_info_names_match_legacy_selection() {
             }
         }
         assert_eq!(renamed, 2);
-        let expected =
-            crate::indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+        let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
         assert_eq!(expected.record.version.to_string(), "2.0");
         let size = bytes.len() as u64;
         let (op, metadata) = operator_with_archive(ETagMemoryBuilder::default(), bytes).await;
@@ -180,37 +202,42 @@ async fn duplicate_info_names_match_legacy_selection() {
     }
 }
 
+/// A replacement after hashing must restart both hashing and metadata parsing,
+/// including when the backend exposes `ETags` but cannot enforce read conditions.
 #[tokio::test]
-async fn changed_archive_between_hashing_and_metadata_retries_the_whole_record() {
-    let replacement = fixture("2.0", false, false);
-    let (op, metadata, reads) = replace_archive_on_read(
-        ETagMemoryBuilder::default(),
-        fixture("1.0", false, false),
-        replacement.clone(),
-        (Operation::BeforeRead, 1),
-    )
-    .await;
-    let original_etag = metadata.etag.clone();
-    let (actual, final_metadata) =
-        crate::cache::read_package_record_with_retry(&op, "test.conda", metadata)
+async fn changed_archive_retries_the_whole_record_with_or_without_read_conditions() {
+    for (builder, trigger) in [
+        (ETagMemoryBuilder::default(), (Operation::BeforeRead, 1)),
+        (
+            ETagMemoryBuilder::default().without_conditional_reads(),
+            (Operation::AfterRead, 0),
+        ),
+    ] {
+        let replacement = fixture("2.0", false, false);
+        let expected = indexed_package_record_from_conda_reader(Cursor::new(&replacement)).unwrap();
+        let (op, metadata, reads) =
+            replace_archive_on_read(builder, fixture("1.0", false, false), replacement, trigger)
+                .await;
+        let original_etag = metadata.etag.clone();
+        let (actual, final_metadata) = read_package_record_with_retry(&op, "test.conda", metadata)
             .await
             .unwrap();
-    let expected =
-        crate::indexed_package_record_from_conda_reader(Cursor::new(&replacement)).unwrap();
-    assert_records_match(&actual, &expected);
-    assert_ne!(final_metadata.etag, original_etag);
-    assert!(reads.load(Ordering::SeqCst) >= 4);
+        assert_records_match(&actual, &expected);
+        assert_ne!(final_metadata.etag, original_etag);
+        assert!(reads.load(Ordering::SeqCst) >= 4);
+    }
 }
 
+/// Filesystem I/O also uses the blocking pool, so parsing must not hold its only worker during reads.
 #[test]
 fn filesystem_indexing_finishes_with_one_blocking_thread() {
     let bytes = fixture("1.0", false, false);
-    let root = tempfile::tempdir().unwrap();
-    std::fs::write(root.path().join("test.conda"), &bytes).unwrap();
-    let mut config = opendal::services::FsConfig::default();
+    let root = tempdir().unwrap();
+    fs::write(root.path().join("test.conda"), &bytes).unwrap();
+    let mut config = FsConfig::default();
     config.root = Some(root.path().to_str().unwrap().to_owned());
     let op = Operator::new(config.into_builder()).unwrap();
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = RuntimeBuilder::new_current_thread()
         .enable_all()
         .max_blocking_threads(1)
         .build()
@@ -219,14 +246,14 @@ fn filesystem_indexing_finishes_with_one_blocking_thread() {
         let metadata = RepodataFileMetadata::new(&op, "test.conda", PreconditionChecks::Enabled)
             .await
             .unwrap();
-        tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            crate::cache::read_package_record_with_retry(&op, "test.conda", metadata),
+        timeout(
+            Duration::from_secs(2),
+            read_package_record_with_retry(&op, "test.conda", metadata),
         )
         .await
     });
     // Keep a regression from hanging the test process during runtime drop.
-    runtime.shutdown_timeout(std::time::Duration::from_millis(50));
+    runtime.shutdown_timeout(Duration::from_millis(50));
     assert!(
         result
             .expect("filesystem I/O deadlocked on the blocking pool")
@@ -234,6 +261,8 @@ fn filesystem_indexing_finishes_with_one_blocking_thread() {
     );
 }
 
+/// Equal timestamps and sizes cannot prove object identity. A replacement after the read
+/// must leave hashes and metadata describing the same original snapshot.
 #[tokio::test]
 async fn storage_without_etags_uses_one_consistent_snapshot() {
     for timestamp_only in [false, true] {
@@ -242,8 +271,7 @@ async fn storage_without_etags_uses_one_consistent_snapshot() {
         let length = initial.len().max(replacement.len());
         initial.resize(length, 0);
         replacement.resize(length, 0);
-        let expected =
-            crate::indexed_package_record_from_conda_reader(Cursor::new(&initial)).unwrap();
+        let expected = indexed_package_record_from_conda_reader(Cursor::new(&initial)).unwrap();
         let builder = if timestamp_only {
             ETagMemoryBuilder::default().with_timestamp_only()
         } else {
@@ -253,7 +281,7 @@ async fn storage_without_etags_uses_one_consistent_snapshot() {
             replace_archive_on_read(builder, initial, replacement, (Operation::AfterRead, 0)).await;
         assert!(metadata.etag.is_none());
         assert_eq!(metadata.last_modified.is_some(), timestamp_only);
-        let (actual, _) = crate::cache::read_package_record_with_retry(&op, "test.conda", metadata)
+        let (actual, _) = read_package_record_with_retry(&op, "test.conda", metadata)
             .await
             .unwrap();
         assert_records_match(&actual, &expected);
@@ -261,30 +289,11 @@ async fn storage_without_etags_uses_one_consistent_snapshot() {
     }
 }
 
-#[tokio::test]
-async fn detected_replacement_retries_without_conditional_request_support() {
-    let replacement = fixture("2.0", false, false);
-    let expected =
-        crate::indexed_package_record_from_conda_reader(Cursor::new(&replacement)).unwrap();
-    let (op, metadata, _) = replace_archive_on_read(
-        ETagMemoryBuilder::default().without_conditional_reads(),
-        fixture("1.0", false, false),
-        replacement,
-        (Operation::AfterRead, 0),
-    )
-    .await;
-    let original_etag = metadata.etag.clone();
-    let (actual, final_metadata) =
-        crate::cache::read_package_record_with_retry(&op, "test.conda", metadata)
-            .await
-            .unwrap();
-    assert_records_match(&actual, &expected);
-    assert_ne!(final_metadata.etag, original_etag);
-}
-
+/// Dropping indexing must cancel pending archive I/O, including later metadata ranges,
+/// instead of leaving a blocking worker downloading an abandoned archive.
 #[tokio::test]
 async fn aborting_hash_or_metadata_reads_drops_the_pending_io() {
-    struct Dropped(Arc<std::sync::atomic::AtomicBool>);
+    struct Dropped(Arc<AtomicBool>);
     impl Drop for Dropped {
         fn drop(&mut self) {
             self.0.store(true, Ordering::SeqCst);
@@ -292,9 +301,9 @@ async fn aborting_hash_or_metadata_reads_drops_the_pending_io() {
     }
     for blocked_read in [0, 1] {
         let reads = Arc::new(AtomicUsize::new(0));
-        let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let entered = Arc::new(tokio::sync::Notify::new());
-        let release = Arc::new(tokio::sync::Notify::new());
+        let dropped = Arc::new(AtomicBool::new(false));
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
         let hooks = TestHooks {
             on_operation: Arc::new({
                 let reads = reads.clone();
@@ -323,8 +332,8 @@ async fn aborting_hash_or_metadata_reads_drops_the_pending_io() {
             fixture("1.0", false, false),
         )
         .await;
-        let task = tokio::spawn(async move { read_package(&op, "test.conda", &metadata).await });
-        tokio::time::timeout(std::time::Duration::from_secs(2), entered.notified())
+        let task = spawn(async move { read_package(&op, "test.conda", &metadata).await });
+        timeout(Duration::from_secs(2), entered.notified())
             .await
             .unwrap();
         task.abort();
@@ -336,23 +345,25 @@ async fn aborting_hash_or_metadata_reads_drops_the_pending_io() {
     }
 }
 
+/// Whole-file-only storage must still index through the snapshot compatibility path.
 #[tokio::test]
 async fn storage_without_range_reads_keeps_the_original_snapshot_path() {
     let bytes = fixture("1.0", false, false);
-    let expected = crate::indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+    let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
     let (op, metadata) =
         operator_with_archive(ETagMemoryBuilder::default().without_range_reads(), bytes).await;
     let actual = read_package(&op, "test.conda", &metadata).await.unwrap();
     assert_records_match(&actual, &expected);
 }
 
+/// Keep support for streamed ZIP writers and comments accepted by the legacy parser
+/// even when the range parser rejects their layout.
 #[tokio::test]
 async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
-    use std::io::Read;
     for descriptors in [false, true] {
         let source = fixture("1.0", true, true);
-        let mut zip = zip::ZipArchive::new(Cursor::new(&source)).unwrap();
-        let mut output = zip::ZipWriter::new_stream(Vec::new());
+        let mut zip = ZipArchive::new(Cursor::new(&source)).unwrap();
+        let mut output = ZipWriter::new_stream(Vec::new());
         for i in 0..zip.len() {
             let mut file = zip.by_index(i).unwrap();
             let mut bytes = Vec::new();
@@ -360,8 +371,8 @@ async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
             output
                 .start_file(
                     file.name().unwrap(),
-                    zip::write::SimpleFileOptions::default()
-                        .compression_method(zip::CompressionMethod::Stored)
+                    SimpleFileOptions::default()
+                        .compression_method(CompressionMethod::Stored)
                         .large_file(true),
                 )
                 .unwrap();
@@ -379,8 +390,7 @@ async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
             let offset = bytes.len() - comment.len();
             bytes[offset] = 1;
         }
-        let expected =
-            crate::indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+        let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
         let (op, metadata) = operator_with_archive(ETagMemoryBuilder::default(), bytes).await;
 
         let actual = read_package(&op, "test.conda", &metadata).await.unwrap();
@@ -388,13 +398,14 @@ async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
     }
 }
 
+/// `OpenDAL` buffers can split ZIP headers across segments; seeking must not require
+/// coalescing the archive or change the resulting hashes and metadata.
 #[test]
 fn buffered_snapshot_handles_segment_boundaries_without_changing_records() {
     for info_first in [false, true] {
         for zip64 in [false, true] {
             let bytes = fixture("1.0", info_first, zip64);
-            let expected =
-                crate::indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+            let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
             for chunk_size in [1, 7, 64] {
                 let buffer: Buffer = bytes
                     .chunks(chunk_size)

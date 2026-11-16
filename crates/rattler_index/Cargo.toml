@@ -1,6 +1,5 @@
 [package]
-# Library tests need the shared backend in packaged sources.
-exclude = ["tests/**", "!tests/integration/etag_memory_backend.rs"]
+exclude = ["tests/**"]
 name = "rattler_index"
 version = "0.34.6"
 edition.workspace = true
@@ -85,4 +84,4 @@ rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-featu
   "sparse",
 ] }
 tempfile = { workspace = true }
-tools = { path = "../tools", default-features = false }
+tools = { path = "../tools", default-features = false, features = ["opendal"] }

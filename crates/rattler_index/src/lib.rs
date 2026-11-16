@@ -12,12 +12,10 @@ pub mod cache;
 /// Defines errors used in this crate.
 pub mod error;
 mod streaming;
-#[cfg(test)]
-#[path = "../tests/integration/etag_memory_backend.rs"]
-mod streaming_test_backend;
 mod utils;
 
 use crate::error::RepodataError;
+use cache::read_package_record_with_retry;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt::Display,
@@ -54,7 +52,7 @@ pub use rattler_conda_types::{
 pub use rattler_config::config::index::{
     IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
 };
-use rattler_digest::Sha256Hash;
+use rattler_digest::{Md5, Sha256Hash, compute_bytes_digest};
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
@@ -203,7 +201,11 @@ pub fn package_record_from_index_json<T: Read>(
         .map(|indexed| indexed.record)
 }
 
-/// Extract an indexed package record from an `index.json` file.
+/// Build validated package metadata, optionally including whole-archive digests.
+///
+/// Streaming callers have already hashed the archive without retaining its bytes.
+/// They pass `None` here and attach those digests before caching or publishing the record;
+/// hashing the extracted info component would produce incorrect package digests.
 fn indexed_package_record_from_index_json<T: Read>(
     package_as_bytes: Option<&[u8]>,
     index_json_reader: &mut T,
@@ -220,9 +222,8 @@ fn indexed_package_record_from_index_json<T: Read>(
         build: index.build,
         build_number: index.build_number,
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
-        md5: package_as_bytes.map(rattler_digest::compute_bytes_digest::<rattler_digest::Md5>),
-        sha256: package_as_bytes
-            .map(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>),
+        md5: package_as_bytes.map(compute_bytes_digest::<Md5>),
+        sha256: package_as_bytes.map(compute_bytes_digest::<Sha256>),
         size: package_as_bytes.map(|bytes| bytes.len() as u64),
         arch: index.arch,
         platform: index.platform,
@@ -483,7 +484,7 @@ async fn read_and_parse_package(
             last_modified,
         }) => {
             // Cache miss - read file with retry logic
-            let (record, final_metadata) = cache::read_package_record_with_retry(
+            let (record, final_metadata) = read_package_record_with_retry(
                 op,
                 &file_path,
                 RepodataFileMetadata {
@@ -511,7 +512,7 @@ async fn read_and_parse_package(
         Err(e) => {
             tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
             // Fall back to direct read without cache
-            cache::read_package_record_with_retry(
+            read_package_record_with_retry(
                 op,
                 &file_path,
                 RepodataFileMetadata {
@@ -1106,7 +1107,7 @@ async fn apply_attestation_sidecars(
             }
         }
 
-        let sha256 = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
+        let sha256 = compute_bytes_digest::<Sha256>(&bytes);
         let content_addressed_path = format!("{sidecar_path}.{}", hex::encode(sha256));
         let content_addressed_bytes = op
             .read(&content_addressed_path)

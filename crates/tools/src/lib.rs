@@ -1,3 +1,5 @@
+#[cfg(feature = "opendal")]
+pub mod etag_memory_backend;
 pub mod libsolv_bindings;
 mod test_files;
 
