@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.4...rattler_repodata_gateway-v0.38.5) - 2026-11-16
+
+### Other
+
+- add missing `windows` feature, make test robust to dep update ([#3192](https://github.com/conda/rattler/pull/3192))
+
 ## [0.38.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.3...rattler_repodata_gateway-v0.38.4) - 2026-11-12
 
 ### Other

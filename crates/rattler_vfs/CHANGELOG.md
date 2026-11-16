@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.3...rattler_vfs-v0.2.4) - 2026-11-16
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.3](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.2...rattler_vfs-v0.2.3) - 2026-11-12
 
 ### Other
