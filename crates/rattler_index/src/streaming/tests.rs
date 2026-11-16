@@ -12,7 +12,7 @@ use opendal::{Configurator, services::FsConfig};
 use serde_json::{json, to_value};
 use std::{
     fs,
-    io::{Cursor, Read, Write},
+    io::{Cursor, Write, copy},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -366,8 +366,6 @@ async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
         let mut output = ZipWriter::new_stream(Vec::new());
         for i in 0..zip.len() {
             let mut file = zip.by_index(i).unwrap();
-            let mut bytes = Vec::new();
-            file.read_to_end(&mut bytes).unwrap();
             output
                 .start_file(
                     file.name().unwrap(),
@@ -376,7 +374,7 @@ async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
                         .large_file(true),
                 )
                 .unwrap();
-            output.write_all(&bytes).unwrap();
+            copy(&mut file, &mut output).unwrap();
         }
         let mut bytes = if descriptors {
             output.finish().unwrap().into_inner()

@@ -10,6 +10,7 @@ use axum::{
     http::{Method, Request, Response, StatusCode, header},
 };
 use bytes::Bytes;
+use opendal::BytesRange;
 use rattler_s3::{ResolvedS3Credentials, S3AddressingStyle, S3CredentialSource};
 use std::{
     convert::Infallible,
@@ -62,27 +63,14 @@ async fn serve(State(state): State<Server>, request: Request<Body>) -> Response<
         .headers()
         .get(header::RANGE)
         .map(|v| v.to_str().unwrap().to_owned());
-    let (start, end) = if let Some(range) = &range {
-        let (start, end) = range
-            .strip_prefix("bytes=")
-            .unwrap()
-            .split_once('-')
-            .unwrap();
-        if start.is_empty() {
-            (length.saturating_sub(end.parse::<usize>().unwrap()), length)
-        } else {
-            (
-                start.parse().unwrap(),
-                if end.is_empty() {
-                    length
-                } else {
-                    (end.parse::<usize>().unwrap() + 1).min(length)
-                },
-            )
-        }
-    } else {
-        (0, length)
-    };
+    let requested = range
+        .as_deref()
+        .unwrap_or("bytes=0-")
+        .parse::<BytesRange>()
+        .unwrap()
+        .to_content_range(length)
+        .unwrap();
+    let (start, end) = (requested.start, requested.end);
     assert!(start < end && end <= length);
     let sent = Arc::new(AtomicUsize::new(0));
     state.reads.lock().unwrap().push(Read {
