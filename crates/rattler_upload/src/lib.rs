@@ -62,19 +62,13 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {
-            let unresolved: Option<rattler_s3::S3Credentials> = s3_opts.credentials.into();
+            let unresolved: Option<rattler_s3::S3Credentials> = s3_opts.credentials.clone().into();
             let credentials =
                 rattler_s3::S3CredentialSource::resolve(unresolved, &s3_opts.channel, &store)
                     .await
                     .into_diagnostic()?;
-            upload::upload_package_to_s3_with_attestation(
-                s3_opts.channel,
-                credentials,
-                &args.package_files,
-                s3_opts.attestation.as_deref(),
-                s3_opts.force,
-            )
-            .await
+            let s3_data = upload::S3Data::from(s3_opts);
+            upload::upload_package_to_s3(credentials, &args.package_files, s3_data).await
         }
         ServerType::CondaForge(conda_forge_opts) => {
             let conda_forge_data = CondaForgeData::from(conda_forge_opts);
