@@ -701,7 +701,13 @@ mod tests {
             .unwrap()
             .replace_all(&err.to_string(), "localhost:[PORT]")
             .to_string();
-        insta::assert_snapshot!(err_string, @"the shard downloaded from 'http://localhost:[PORT]/linux-64/shards/bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6.msgpack.zst' has SHA-256 705e4af249688ae83ad71cc747c34fee1fe00334505894accb903fbfb8ff6017, but the shard index lists bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6");
+        // The served bytes come from the zstd encoder, whose output (and so
+        // its hash) can change between zstd versions.
+        let err_string = regex::Regex::new(r"has SHA-256 [0-9a-f]{64}")
+            .unwrap()
+            .replace_all(&err_string, "has SHA-256 [HASH]")
+            .to_string();
+        insta::assert_snapshot!(err_string, @"the shard downloaded from 'http://localhost:[PORT]/linux-64/shards/bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6.msgpack.zst' has SHA-256 [HASH], but the shard index lists bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6");
 
         let err = subdir
             .fetch_package_records(&package_name, FormatBucketSet::ALL, None)

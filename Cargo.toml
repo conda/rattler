@@ -225,7 +225,7 @@ wasm-bindgen-futures = "0.4"
 wasmtimer = "0.4"
 web-sys = "0.3"
 which = "8"
-windows = { version = "0.62", features = ["Win32_Storage_ProjectedFileSystem", "Win32_Foundation", "Win32_System_LibraryLoader"] }
+windows = { version = "0.62", features = ["Win32_Storage_ProjectedFileSystem", "Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_LibraryLoader"] }
 windows-sys = { version = "0.61", default-features = false }
 windows-native-keyring-store = "1"
 winver = { version = "1" }
