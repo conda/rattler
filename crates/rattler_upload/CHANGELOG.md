@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/conda/rattler/compare/rattler_upload-v0.15.6...rattler_upload-v0.16.0) - 2026-11-16
+
+### Added
+
+- *(upload)* add --skip-existing to anaconda upload ([#1617](https://github.com/conda/rattler/pull/1617)) ([#3160](https://github.com/conda/rattler/pull/3160))
+
 ## [0.15.6](https://github.com/conda/rattler/compare/rattler_upload-v0.15.5...rattler_upload-v0.15.6) - 2026-11-12
 
 ### Other

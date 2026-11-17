@@ -5150,7 +5150,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.55.8"
+version = "0.55.9"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -5217,7 +5217,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.5.17"
+version = "0.5.18"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -5511,7 +5511,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.34.8"
+version = "0.34.9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5607,7 +5607,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "configparser",
  "dirs",
@@ -5768,7 +5768,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.38.4"
+version = "0.38.5"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5867,7 +5867,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.37"
+version = "0.2.38"
 dependencies = [
  "birdcage",
  "clap",
@@ -5878,7 +5878,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.29.10"
+version = "0.29.11"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -5956,7 +5956,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.15.6"
+version = "0.16.0"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -5994,7 +5994,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_vfs"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -6026,7 +6026,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.3.8"
+version = "0.3.9"
 dependencies = [
  "async-trait",
  "fs-err",
