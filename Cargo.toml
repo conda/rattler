@@ -180,15 +180,15 @@ smallvec = { version = "1", features = [
   "const_generics",
   "union",
 ] }
-sigstore-sign = { version = "0.15.1", default-features = false, features = [
+sigstore-sign = { version = "0.16.0", default-features = false, features = [
   "aws-lc-rs",
 ] }
-sigstore-types = "0.15.1"
-sigstore-verify = { version = "0.15.1", default-features = false, features = [
+sigstore-types = "0.16.0"
+sigstore-verify = { version = "0.16.0", default-features = false, features = [
   "aws-lc-rs",
   "tuf",
 ] }
-sigstore-trust-root = { version = "0.15.1", default-features = false, features = [
+sigstore-trust-root = { version = "0.16.0", default-features = false, features = [
   "aws-lc-rs",
   "tuf",
 ] }

@@ -5,7 +5,7 @@ use clap::ArgGroup;
 use futures_util::{StreamExt, stream};
 use miette::IntoDiagnostic;
 use rattler_conda_types::RepoDataRecord;
-use rattler_sigstore::{ChannelCheck, VerificationConfig, VerificationPolicy};
+use rattler_sigstore::{ChannelCheck, GitHubTrustDomain, VerificationConfig, VerificationPolicy};
 use reqwest_middleware::ClientWithMiddleware;
 
 use crate::publisher_args::PublisherArgs;
@@ -44,22 +44,55 @@ pub struct AttestationPolicyArgs {
     /// package was retrieved from, e.g. when using a mirror.
     #[clap(long, requires = "verify_attestations")]
     allow_channel_mismatch: bool,
+
+    /// The GitHub trust domains whose Sigstore instances are trusted besides
+    /// the Sigstore public-good instance: `github.com`, or a GitHub Enterprise
+    /// Cloud data residency region such as `prod-weu-01`. Can be given more
+    /// than once, which replaces the default.
+    ///
+    /// GitHub signs the attestations of private and internal repositories
+    /// with these instances, which keep no public transparency log.
+    #[clap(
+        long,
+        value_name = "DOMAIN",
+        default_value = "github.com",
+        requires = "verify_attestations"
+    )]
+    github_trust_domain: Vec<GitHubTrustDomain>,
+
+    /// Only accept attestations that are recorded in the public transparency
+    /// log of the Sigstore public-good instance.
+    #[clap(
+        long,
+        requires = "verify_attestations",
+        conflicts_with = "github_trust_domain"
+    )]
+    public_good_only: bool,
 }
 
 impl AttestationPolicyArgs {
+    /// The GitHub trust domains to trust besides the public-good instance.
+    fn github_trust_domains(&self) -> Vec<GitHubTrustDomain> {
+        if self.public_good_only {
+            Vec::new()
+        } else {
+            self.github_trust_domain.clone()
+        }
+    }
+
     /// Builds the verification policy described by the flags.
     pub fn policy(&self) -> VerificationPolicy {
         let Some(mode) = self.verify_attestations else {
             return VerificationPolicy::Disabled;
         };
 
-        let config = VerificationConfig::new(self.publisher.publisher()).with_channel_check(
-            if self.allow_channel_mismatch {
+        let config = VerificationConfig::new(self.publisher.publisher())
+            .with_channel_check(if self.allow_channel_mismatch {
                 ChannelCheck::Warn
             } else {
                 ChannelCheck::Require
-            },
-        );
+            })
+            .with_github_trust_domains(self.github_trust_domains());
 
         match mode {
             VerifyMode::Require => VerificationPolicy::Require(config),

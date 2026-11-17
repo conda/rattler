@@ -10,8 +10,10 @@ use rattler_package_streaming::fs::repodata_record_from_package_archive;
 use rattler_redaction::Redact;
 use rattler_sigstore::{
     CONDA_PUBLISH_PREDICATE_TYPE, ChannelCheck, DEFAULT_MAX_SIDECAR_SIZE, FulcioCiClaims,
-    RejectedAttestation, SigstoreError, VerifiedAttestation, VerifiedChecks, embedded_trusted_root,
-    fetch_bundles, mutable_sidecar_url, production_trusted_root, verify_bundles,
+    GitHubTrustDomain, RejectedAttestation, SigstoreError, TrustedRoot, TrustedRoots,
+    VerifiedAttestation, VerifiedChecks, embedded_github_trusted_root, embedded_trusted_root,
+    fetch_bundles, github_trusted_root, mutable_sidecar_url, production_trusted_root,
+    verify_bundles_with_trusted_roots,
 };
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
@@ -102,6 +104,21 @@ pub struct Opt {
     #[clap(flatten)]
     publisher: PublisherArgs,
 
+    /// The GitHub trust domains whose Sigstore instances are trusted besides
+    /// the Sigstore public-good instance: `github.com`, or a GitHub Enterprise
+    /// Cloud data residency region such as `prod-weu-01`. Can be given more
+    /// than once, which replaces the default.
+    ///
+    /// GitHub signs the attestations of private and internal repositories
+    /// with these instances, which keep no public transparency log.
+    #[clap(long, value_name = "DOMAIN", default_value = "github.com")]
+    github_trust_domain: Vec<GitHubTrustDomain>,
+
+    /// Only accept attestations that are recorded in the public transparency
+    /// log of the Sigstore public-good instance.
+    #[clap(long, conflicts_with = "github_trust_domain")]
+    public_good_only: bool,
+
     /// Output format (defaults to human-readable output).
     ///
     /// The JSON output contains every claim of the signing certificate and the
@@ -147,7 +164,35 @@ pub async fn verify_attestation(opt: Opt, offline: bool) -> miette::Result<()> {
         Some(root) => root,
         None => production_trusted_root().await.into_diagnostic()?,
     };
-    let mut verification = verify_bundles(
+    // The roots of the GitHub trust domains that were asked for. One that
+    // cannot be loaded is reported for the bundles that need it.
+    let mut github_roots: Vec<(GitHubTrustDomain, std::sync::Arc<TrustedRoot>)> = Vec::new();
+    let mut unavailable_github_roots = Vec::new();
+    let github_trust_domains = if opt.public_good_only {
+        Vec::new()
+    } else {
+        opt.github_trust_domain
+    };
+    for trust_domain in github_trust_domains {
+        let root = if offline {
+            embedded_github_trusted_root(&trust_domain).map(std::sync::Arc::new)
+        } else {
+            github_trusted_root(&trust_domain).await
+        };
+        match root {
+            Ok(root) => github_roots.push((trust_domain, root)),
+            Err(err) => unavailable_github_roots.push((trust_domain, err.to_string())),
+        }
+    }
+    let mut trusted_roots = TrustedRoots::new(trusted_root);
+    for (trust_domain, root) in &github_roots {
+        trusted_roots = trusted_roots.with_github(trust_domain.clone(), root);
+    }
+    for (trust_domain, reason) in unavailable_github_roots {
+        trusted_roots = trusted_roots.with_unavailable_github(trust_domain, reason);
+    }
+
+    let mut verification = verify_bundles_with_trusted_roots(
         &record,
         &bundles,
         if compare_channel {
@@ -155,7 +200,7 @@ pub async fn verify_attestation(opt: Opt, offline: bool) -> miette::Result<()> {
         } else {
             ChannelCheck::Ignore
         },
-        trusted_root,
+        trusted_roots,
     )
     .into_diagnostic()?;
 
