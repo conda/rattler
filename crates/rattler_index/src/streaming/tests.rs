@@ -1,14 +1,16 @@
-//! Compare the new read paths with the legacy parser, including archive layouts
-//! and storage races that ordinary filesystem indexing does not exercise.
+//! Check archive layouts, whole-file digests, storage races and cancellation.
 
 use super::*;
 #[cfg(feature = "s3")]
 mod http;
 use crate::{
-    PreconditionChecks, cache::read_package_record_with_retry,
-    indexed_package_record_from_conda_reader,
+    PreconditionChecks,
+    cache::{PackageRecordCache, read_package_record_with_retry},
+    indexed_package_record_from_conda_reader, parse_package_buffer, read_and_parse_package,
 };
+use bytes::Bytes;
 use opendal::{Configurator, services::FsConfig};
+use rattler_conda_types::Subdir;
 use serde_json::{json, to_value};
 use std::{
     fs,
@@ -77,7 +79,7 @@ fn fixture_with_payload(version: &str, info_first: bool, zip64: bool, payload: &
     zip.finish().unwrap().into_inner()
 }
 
-/// The legacy parser is the compatibility oracle; compare every published record field.
+/// Compare all published metadata and digests with the existing buffered reader.
 #[track_caller]
 fn assert_records_match(actual: &IndexedPackageRecord, expected: &IndexedPackageRecord) {
     assert_eq!(
@@ -86,7 +88,7 @@ fn assert_records_match(actual: &IndexedPackageRecord, expected: &IndexedPackage
     );
 }
 
-/// Capture the pre-read identity so race tests can distinguish a successful retry from stale data.
+/// Write a fixture and capture its identity before any test reads.
 async fn operator_with_archive(
     builder: ETagMemoryBuilder,
     bytes: Vec<u8>,
@@ -99,8 +101,7 @@ async fn operator_with_archive(
     (op, metadata)
 }
 
-/// Inject a deterministic replacement at a read boundary without timing-dependent sleeps.
-/// The shared cell lets the backend hook write through the completed operator.
+/// Replace the archive at a chosen read boundary and count matching read operations.
 async fn replace_archive_on_read(
     builder: ETagMemoryBuilder,
     initial: Vec<u8>,
@@ -137,68 +138,143 @@ async fn replace_archive_on_read(
     (op, metadata, reads)
 }
 
-/// Guard against hashing only the info component or depending on its ZIP position.
+/// Check a storage read against the complete record produced by the buffered parser.
+async fn assert_indexes_like_legacy(builder: ETagMemoryBuilder, bytes: Vec<u8>) {
+    let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
+    let (op, metadata) = operator_with_archive(builder, bytes).await;
+    let (actual, _) = read_package_record_with_retry(&op, "test.conda", metadata)
+        .await
+        .unwrap();
+    assert_records_match(&actual, &expected);
+}
+
+// Archive layouts and buffered fallbacks.
+
+/// Preserve records for both component orders, `Zip64` headers and segmented buffers.
 #[tokio::test]
-async fn metadata_and_full_archive_hashes_match_for_both_orders_and_zip64() {
+async fn archive_layouts_match_the_buffered_reader() {
     for info_first in [false, true] {
         for zip64 in [false, true] {
             let bytes = fixture("1.0", info_first, zip64);
+            for builder in [
+                ETagMemoryBuilder::default(),
+                ETagMemoryBuilder::default().without_range_reads(),
+            ] {
+                assert_indexes_like_legacy(builder, bytes.clone()).await;
+            }
             let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
-            let (op, metadata) = operator_with_archive(ETagMemoryBuilder::default(), bytes).await;
-            let (actual, _) = read_package_record_with_retry(&op, "test.conda", metadata)
-                .await
-                .unwrap();
-            assert_records_match(&actual, &expected);
+            for chunk_size in [1, 7, 64] {
+                let buffer: Buffer = bytes
+                    .chunks(chunk_size)
+                    .map(Bytes::copy_from_slice)
+                    .collect::<Vec<_>>()
+                    .into();
+                assert_records_match(&buffered_snapshot(buffer).unwrap(), &expected);
+            }
         }
     }
 }
 
-/// ZIP readers disagree on duplicate names; preserve the legacy selection on the range path.
+/// Let the buffered parser handle duplicate info names instead of duplicating its selection rules.
 #[tokio::test]
-async fn duplicate_info_names_match_legacy_selection() {
-    for duplicate_last in [false, true] {
-        let mut entries = [
-            ("info-test.tar.zst", "1.0"),
-            ("info-last.tar.zst", "2.0"),
-            ("info-next.tar.zst", "3.0"),
-        ];
-        if duplicate_last {
-            entries.swap(1, 2);
-        }
-        let mut output = ZipWriter::new(Cursor::new(Vec::new()));
-        for (name, version) in entries {
-            let source = fixture(version, true, false);
-            let mut zip = ZipArchive::new(Cursor::new(source)).unwrap();
+async fn duplicate_info_names_use_the_buffered_reader() {
+    let source = fixture("1.0", true, false);
+    let mut zip = ZipArchive::new(Cursor::new(&source)).unwrap();
+    let mut output = ZipWriter::new(Cursor::new(Vec::new()));
+    for name in ["info-test.tar.zst", "info-next.tar.zst"] {
+        output
+            .raw_copy_file_rename(zip.by_name("info-test.tar.zst").unwrap(), name)
+            .unwrap();
+    }
+    let mut bytes = output.finish().unwrap().into_inner();
+    // The writer rejects duplicates. Rename only the local/central header filenames.
+    let offsets = {
+        let mut zip = ZipArchive::new(Cursor::new(&bytes)).unwrap();
+        let entry = zip.by_name("info-next.tar.zst").unwrap();
+        [
+            entry.header_start() as usize + 30,
+            entry.central_header_start() as usize + 46,
+        ]
+    };
+    for start in offsets {
+        bytes[start..start + b"info-test.tar.zst".len()].copy_from_slice(b"info-test.tar.zst");
+    }
+    let (op, _) = operator_with_archive(ETagMemoryBuilder::default(), bytes.clone()).await;
+    let reader = op.reader("test.conda").await.unwrap();
+    let directory = op
+        .reader_with("test.conda")
+        .chunk(METADATA_CHUNK)
+        .await
+        .unwrap();
+    assert!(matches!(
+        metadata_bytes(&reader, directory, bytes.len() as u64).await,
+        Err(MetadataReadError::UnsupportedLayout)
+    ));
+    assert_indexes_like_legacy(ETagMemoryBuilder::default(), bytes).await;
+}
+
+/// Keep support for streamed ZIP writers and comments accepted by the legacy parser
+/// even when the range parser rejects their layout.
+#[tokio::test]
+async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
+    for descriptors in [false, true] {
+        let source = fixture("1.0", true, true);
+        let mut zip = ZipArchive::new(Cursor::new(&source)).unwrap();
+        let mut output = ZipWriter::new_stream(Vec::new());
+        for i in 0..zip.len() {
+            let mut file = zip.by_index(i).unwrap();
             output
-                .raw_copy_file_rename(zip.by_name("info-test.tar.zst").unwrap(), name)
+                .start_file(
+                    file.name().unwrap(),
+                    SimpleFileOptions::default()
+                        .compression_method(CompressionMethod::Stored)
+                        .large_file(true),
+                )
                 .unwrap();
+            copy(&mut file, &mut output).unwrap();
         }
-        let mut bytes = output.finish().unwrap().into_inner();
-        // The writer rejects duplicates, so rename the local and central headers afterward.
-        let mut renamed = 0;
-        for offset in 0..=bytes.len() - b"info-last.tar.zst".len() {
-            if bytes[offset..].starts_with(b"info-last.tar.zst") {
-                bytes[offset..offset + b"info-last.tar.zst".len()]
-                    .copy_from_slice(b"info-test.tar.zst");
-                renamed += 1;
-            }
+        let mut bytes = if descriptors {
+            output.finish().unwrap().into_inner()
+        } else {
+            source
+        };
+        if !descriptors {
+            // A control byte in the comment is accepted by the buffered ZIP reader.
+            let comment = b"archive footer must be included in hashes";
+            let offset = bytes.len() - comment.len();
+            bytes[offset] = 1;
         }
-        assert_eq!(renamed, 2);
-        let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
-        assert_eq!(expected.record.version.to_string(), "2.0");
-        let size = bytes.len() as u64;
-        let (op, metadata) = operator_with_archive(ETagMemoryBuilder::default(), bytes).await;
-        let reader = op.reader("test.conda").await.unwrap();
-        let directory = op
-            .reader_with("test.conda")
-            .chunk(METADATA_CHUNK)
+        assert_indexes_like_legacy(ETagMemoryBuilder::default(), bytes).await;
+    }
+}
+
+// Replacements must preserve the record's archive identity.
+
+/// Equal timestamps and sizes cannot prove object identity. A replacement after the read
+/// must leave hashes and metadata describing the same original snapshot.
+#[tokio::test]
+async fn storage_without_etags_uses_one_consistent_snapshot() {
+    for timestamp_only in [false, true] {
+        let mut initial = fixture("1.0", false, false);
+        let mut replacement = fixture("2.0", false, false);
+        let length = initial.len().max(replacement.len());
+        initial.resize(length, 0);
+        replacement.resize(length, 0);
+        let expected = indexed_package_record_from_conda_reader(Cursor::new(&initial)).unwrap();
+        let builder = if timestamp_only {
+            ETagMemoryBuilder::default().with_timestamp_only()
+        } else {
+            ETagMemoryBuilder::default().without_identity()
+        };
+        let (op, metadata, reads) =
+            replace_archive_on_read(builder, initial, replacement, (Operation::AfterRead, 0)).await;
+        assert!(metadata.etag.is_none());
+        assert_eq!(metadata.last_modified.is_some(), timestamp_only);
+        let (actual, _) = read_package_record_with_retry(&op, "test.conda", metadata)
             .await
             .unwrap();
-        // Compatibility must not require a whole-archive snapshot for duplicates.
-        metadata_bytes(&reader, directory, size).await.unwrap();
-
-        let actual = read_package(&op, "test.conda", &metadata).await.unwrap();
         assert_records_match(&actual, &expected);
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
     }
 }
 
@@ -227,6 +303,8 @@ async fn changed_archive_retries_the_whole_record_with_or_without_read_condition
         assert!(reads.load(Ordering::SeqCst) >= 4);
     }
 }
+
+// Cancellation and executor safety.
 
 /// Filesystem I/O also uses the blocking pool, so parsing must not hold its only worker during reads.
 #[test]
@@ -259,34 +337,6 @@ fn filesystem_indexing_finishes_with_one_blocking_thread() {
             .expect("filesystem I/O deadlocked on the blocking pool")
             .is_ok()
     );
-}
-
-/// Equal timestamps and sizes cannot prove object identity. A replacement after the read
-/// must leave hashes and metadata describing the same original snapshot.
-#[tokio::test]
-async fn storage_without_etags_uses_one_consistent_snapshot() {
-    for timestamp_only in [false, true] {
-        let mut initial = fixture("1.0", false, false);
-        let mut replacement = fixture("2.0", false, false);
-        let length = initial.len().max(replacement.len());
-        initial.resize(length, 0);
-        replacement.resize(length, 0);
-        let expected = indexed_package_record_from_conda_reader(Cursor::new(&initial)).unwrap();
-        let builder = if timestamp_only {
-            ETagMemoryBuilder::default().with_timestamp_only()
-        } else {
-            ETagMemoryBuilder::default().without_identity()
-        };
-        let (op, metadata, reads) =
-            replace_archive_on_read(builder, initial, replacement, (Operation::AfterRead, 0)).await;
-        assert!(metadata.etag.is_none());
-        assert_eq!(metadata.last_modified.is_some(), timestamp_only);
-        let (actual, _) = read_package_record_with_retry(&op, "test.conda", metadata)
-            .await
-            .unwrap();
-        assert_records_match(&actual, &expected);
-        assert_eq!(reads.load(Ordering::SeqCst), 1);
-    }
 }
 
 /// Dropping indexing must cancel pending archive I/O, including later metadata ranges,
@@ -345,74 +395,35 @@ async fn aborting_hash_or_metadata_reads_drops_the_pending_io() {
     }
 }
 
-/// Whole-file-only storage must still index through the snapshot compatibility path.
-#[tokio::test]
-async fn storage_without_range_reads_keeps_the_original_snapshot_path() {
-    let bytes = fixture("1.0", false, false);
-    let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
-    let (op, metadata) =
-        operator_with_archive(ETagMemoryBuilder::default().without_range_reads(), bytes).await;
-    let actual = read_package(&op, "test.conda", &metadata).await.unwrap();
-    assert_records_match(&actual, &expected);
-}
+// Error kinds must survive the I/O adapters and archive parser.
 
-/// Keep support for streamed ZIP writers and comments accepted by the legacy parser
-/// even when the range parser rejects their layout.
-#[tokio::test]
-async fn stored_data_descriptors_and_legacy_zip_comments_remain_readable() {
-    for descriptors in [false, true] {
-        let source = fixture("1.0", true, true);
-        let mut zip = ZipArchive::new(Cursor::new(&source)).unwrap();
-        let mut output = ZipWriter::new_stream(Vec::new());
-        for i in 0..zip.len() {
-            let mut file = zip.by_index(i).unwrap();
-            output
-                .start_file(
-                    file.name().unwrap(),
-                    SimpleFileOptions::default()
-                        .compression_method(CompressionMethod::Stored)
-                        .large_file(true),
-                )
-                .unwrap();
-            copy(&mut file, &mut output).unwrap();
-        }
-        let mut bytes = if descriptors {
-            output.finish().unwrap().into_inner()
-        } else {
-            source
-        };
-        if !descriptors {
-            // The legacy reader permits this comment; async ZIP's stricter
-            // embedded-record heuristic rejects it and must use the fallback.
-            let comment = b"archive footer must be included in hashes";
-            let offset = bytes.len() - comment.len();
-            bytes[offset] = 1;
-        }
-        let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
-        let (op, metadata) = operator_with_archive(ETagMemoryBuilder::default(), bytes).await;
-
-        let actual = read_package(&op, "test.conda", &metadata).await.unwrap();
-        assert_records_match(&actual, &expected);
-    }
-}
-
-/// `OpenDAL` buffers can split ZIP headers across segments; seeking must not require
-/// coalescing the archive or change the resulting hashes and metadata.
+/// Preserve replacement errors nested by `OpenDAL`'s futures reader and async ZIP.
 #[test]
-fn buffered_snapshot_handles_segment_boundaries_without_changing_records() {
-    for info_first in [false, true] {
-        for zip64 in [false, true] {
-            let bytes = fixture("1.0", info_first, zip64);
-            let expected = indexed_package_record_from_conda_reader(Cursor::new(&bytes)).unwrap();
-            for chunk_size in [1, 7, 64] {
-                let buffer: Buffer = bytes
-                    .chunks(chunk_size)
-                    .map(bytes::Bytes::copy_from_slice)
-                    .collect::<Vec<_>>()
-                    .into();
-                let actual = buffered_snapshot(buffer).unwrap();
-                assert_records_match(&actual, &expected);
-            }
+fn nested_storage_errors_preserve_the_retry_kind() {
+    for depth in [1, 2] {
+        let mut error = io::Error::other(Error::new(ErrorKind::ConditionNotMatch, "replaced"));
+        for _ in 1..depth {
+            error = io::Error::other(error);
         }
+        assert_eq!(storage_error(error).kind(), ErrorKind::ConditionNotMatch);
     }
+}
+
+/// Keep the original parser's error kind and message for corrupt tar.bz2 packages.
+#[tokio::test]
+async fn corrupt_tar_bz2_preserves_the_parser_error() {
+    let bytes = Bytes::from_static(b"not a bzip2 archive");
+    let expected = parse_package_buffer(Buffer::from(bytes.clone()), "broken.tar.bz2").unwrap_err();
+    let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
+    op.write("noarch/broken.tar.bz2", bytes).await.unwrap();
+    let actual = read_and_parse_package(
+        &op,
+        &PackageRecordCache::new(),
+        Subdir::NoArch,
+        "broken.tar.bz2",
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(actual.kind(), expected.kind());
+    assert_eq!(actual.to_string(), expected.to_string());
 }

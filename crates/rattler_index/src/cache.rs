@@ -8,9 +8,9 @@
 //! with any `OpenDAL` backend, using conditional reads when supported (S3, HTTP) or simple
 //! reads as fallback (filesystem).
 
-use std::{future::Future, sync::Arc, time::SystemTime};
+use std::{future::Future, io, sync::Arc, time::SystemTime};
 
-use opendal::{Buffer, Error, ErrorKind, Operator, raw::Timestamp};
+use opendal::{Buffer, ErrorKind, Operator, raw::Timestamp};
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
 use tokio::sync::RwLock;
@@ -177,12 +177,11 @@ impl PackageRecordCache {
 /// same version that was stated. Retries with exponential backoff if the file changes
 /// between `stat()` and `read()`.
 ///
-/// Only retries on [`ErrorKind::ConditionNotMatch`]. Falls back to simple `read()` for
-/// backends without conditional read support (returns [`ErrorKind::Unsupported`]).
+/// Retry on [`ErrorKind::ConditionNotMatch`]. If a backend reports
+/// [`ErrorKind::Unsupported`], disable request conditions and retry the read.
 ///
 /// Returns `(buffer, final_metadata)` where `final_metadata` reflects the version actually
 /// read (may differ from `initial_metadata` if retries occurred).
-///
 pub async fn read_package_with_retry(
     op: &Operator,
     path: &str,
@@ -194,30 +193,29 @@ pub async fn read_package_with_retry(
     .await
 }
 
-/// Keep the parsed record and its cache identity on the same archive version.
-/// `.conda` reads can stream; other formats retain their existing buffer parser.
-/// Retrying the entire operation prevents combining old hashes with new metadata.
+/// Read one archive version and parse its record, preserving parsing errors.
+/// Streaming `.conda` reads retry hashing and metadata together after replacement.
 pub(crate) async fn read_package_record_with_retry(
     op: &Operator,
     path: &str,
     initial_metadata: RepodataFileMetadata,
-) -> opendal::Result<(IndexedPackageRecord, RepodataFileMetadata)> {
-    read_with_retry(op, path, initial_metadata, |metadata| async move {
-        if path.ends_with(".conda") {
+) -> io::Result<(IndexedPackageRecord, RepodataFileMetadata)> {
+    if path.ends_with(".conda") {
+        read_with_retry(op, path, initial_metadata, |metadata| async move {
             read_package(op, path, &metadata).await
-        } else {
-            let buffer = read_with_metadata_check(op, path, &metadata).await?;
-            parse_package_buffer(buffer, path).map_err(|error| {
-                Error::new(ErrorKind::Unexpected, "could not parse package").set_source(error)
-            })
-        }
-    })
-    .await
+        })
+        .await
+        .map_err(io::Error::other)
+    } else {
+        let (buffer, metadata) = read_package_with_retry(op, path, initial_metadata)
+            .await
+            .map_err(io::Error::other)?;
+        Ok((parse_package_buffer(buffer, path)?, metadata))
+    }
 }
 
-/// Share replacement backoff between the public buffer reader and indexing.
-/// Disabling unsupported request conditions must preserve replacement retries:
-/// a multi-read operation can still detect a changed `ETag` after reading.
+/// Retry an entire read on `ConditionNotMatch`, refreshing its identity each time.
+/// `Unsupported` disables request conditions but keeps replacement retries enabled.
 async fn read_with_retry<T, Fut>(
     op: &Operator,
     path: &str,
@@ -250,7 +248,7 @@ where
                 );
                 use_conditions = false;
             }
-            Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+            Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
                 // File changed - check if we should retry
                 match retry_policy.should_retry(request_start_time, current_try) {
                     RetryDecision::Retry { execute_after } => {
@@ -272,7 +270,7 @@ where
                             etag: fresh_metadata.etag().map(str::to_owned),
                             last_modified: fresh_metadata.last_modified(),
                             file_existed: true,
-                            precondition_checks: PreconditionChecks::Enabled,
+                            precondition_checks: crate::PreconditionChecks::Enabled,
                         };
                         // Loop continues to next iteration with fresh metadata
                     }

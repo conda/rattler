@@ -52,7 +52,7 @@ pub use rattler_conda_types::{
 pub use rattler_config::config::index::{
     IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
 };
-use rattler_digest::{Md5, Sha256Hash, compute_bytes_digest};
+use rattler_digest::{Md5, Md5Hash, Sha256Hash, compute_bytes_digest};
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
@@ -146,6 +146,25 @@ pub(crate) struct IndexedPackageRecord {
     wheel_url: Option<UrlOrPath>,
 }
 
+/// Whole-archive digests required when constructing a package record.
+#[derive(Clone, Copy)]
+struct ArchiveDigests {
+    md5: Md5Hash,
+    sha256: Sha256Hash,
+    size: u64,
+}
+
+impl ArchiveDigests {
+    /// Hash retained archive bytes for the public buffered readers.
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Self {
+            md5: compute_bytes_digest::<Md5>(bytes),
+            sha256: compute_bytes_digest::<Sha256>(bytes),
+            size: bytes.len() as u64,
+        }
+    }
+}
+
 /// Statistics for a single subdir indexing operation
 #[derive(Debug, Clone, Default)]
 pub struct SubdirIndexStats {
@@ -197,17 +216,16 @@ pub fn package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
-    indexed_package_record_from_index_json(Some(package_as_bytes.as_ref()), index_json_reader)
-        .map(|indexed| indexed.record)
+    indexed_package_record_from_index_json(
+        ArchiveDigests::from_bytes(package_as_bytes.as_ref()),
+        index_json_reader,
+    )
+    .map(|indexed| indexed.record)
 }
 
-/// Build validated package metadata, optionally including whole-archive digests.
-///
-/// Streaming callers have already hashed the archive without retaining its bytes.
-/// They pass `None` here and attach those digests before caching or publishing the record;
-/// hashing the extracted info component would produce incorrect package digests.
+/// Parse validated index metadata with the digests of its complete package archive.
 fn indexed_package_record_from_index_json<T: Read>(
-    package_as_bytes: Option<&[u8]>,
+    digests: ArchiveDigests,
     index_json_reader: &mut T,
 ) -> std::io::Result<IndexedPackageRecord> {
     let validated = IndexJson::from_reader(index_json_reader)?
@@ -222,9 +240,9 @@ fn indexed_package_record_from_index_json<T: Read>(
         build: index.build,
         build_number: index.build_number,
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
-        md5: package_as_bytes.map(compute_bytes_digest::<Md5>),
-        sha256: package_as_bytes.map(compute_bytes_digest::<Sha256>),
-        size: package_as_bytes.map(|bytes| bytes.len() as u64),
+        md5: Some(digests.md5),
+        sha256: Some(digests.sha256),
+        size: Some(digests.size),
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
@@ -347,7 +365,7 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
 }
 
 fn read_indexed_json_from_archive(
-    bytes: Option<&[u8]>,
+    digests: ArchiveDigests,
     archive: &mut tar::Archive<impl Read>,
 ) -> std::io::Result<IndexedPackageRecord> {
     let mut index_json = None;
@@ -356,7 +374,7 @@ fn read_indexed_json_from_archive(
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            index_json = Some(indexed_package_record_from_index_json(bytes, &mut entry)?);
+            index_json = Some(indexed_package_record_from_index_json(digests, &mut entry)?);
         } else if path.as_os_str().eq("info/run_exports.json") {
             run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
         }
@@ -374,7 +392,8 @@ fn read_index_json_from_archive(
     bytes: &[u8],
     archive: &mut tar::Archive<impl Read>,
 ) -> std::io::Result<PackageRecord> {
-    read_indexed_json_from_archive(Some(bytes), archive).map(|indexed| indexed.record)
+    read_indexed_json_from_archive(ArchiveDigests::from_bytes(bytes), archive)
+        .map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a `.conda` package file content.
@@ -401,7 +420,10 @@ fn indexed_package_record_from_tar_bz2_reader(
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return indexed_package_record_from_index_json(Some(&bytes), &mut entry);
+            return indexed_package_record_from_index_json(
+                ArchiveDigests::from_bytes(&bytes),
+                &mut entry,
+            );
         }
     }
     Err(std::io::Error::other("No index.json found"))
@@ -414,7 +436,7 @@ fn indexed_package_record_from_conda_reader(
     reader.read_to_end(&mut bytes)?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_indexed_json_from_archive(Some(&bytes), &mut archive)
+    read_indexed_json_from_archive(ArchiveDigests::from_bytes(&bytes), &mut archive)
 }
 
 /// Parse a package file buffer based on its filename extension.
@@ -494,8 +516,7 @@ async fn read_and_parse_package(
                     precondition_checks: PreconditionChecks::Enabled, // Always enabled for cache reads
                 },
             )
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
+            .await?;
 
             // Store in cache using filename as key
             cache
@@ -524,7 +545,6 @@ async fn read_and_parse_package(
             )
             .await
             .map(|(record, _)| record)
-            .map_err(|error| std::io::Error::other(error.to_string()))
         }
     }
 }
@@ -1107,7 +1127,7 @@ async fn apply_attestation_sidecars(
             }
         }
 
-        let sha256 = compute_bytes_digest::<Sha256>(&bytes);
+        let sha256 = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
         let content_addressed_path = format!("{sidecar_path}.{}", hex::encode(sha256));
         let content_addressed_bytes = op
             .read(&content_addressed_path)
@@ -2724,8 +2744,11 @@ mod tests {
                 "version": "1.0"
             }"#,
         );
-        let indexed =
-            indexed_package_record_from_index_json(Some(b"package"), &mut index_json).unwrap();
+        let indexed = indexed_package_record_from_index_json(
+            ArchiveDigests::from_bytes(b"package"),
+            &mut index_json,
+        )
+        .unwrap();
         assert_eq!(indexed.repodata_revision, RepodataRevision::Legacy);
 
         let mut v3 = V3Packages::default();

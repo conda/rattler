@@ -186,6 +186,15 @@ impl Default for TestHooks {
     }
 }
 
+/// Storage behaviors used to exercise version checks and read fallbacks.
+#[derive(Clone, Copy, Debug, Default)]
+struct StorageBehavior {
+    omit_identity: bool,
+    timestamp_only: bool,
+    reject_conditions: bool,
+    reject_ranges: bool,
+}
+
 /// In-memory storage backend with `ETag` and conditional request support.
 ///
 /// Implements `opendal`'s `Service` trait to provide S3-like behavior for
@@ -196,10 +205,7 @@ pub struct ETagMemoryBackend {
     storage: Arc<RwLock<HashMap<String, Arc<RwLock<FileEntry>>>>>,
     directories: Arc<RwLock<HashSet<String>>>,
     test_hooks: Option<TestHooks>,
-    omit_identity: bool,
-    timestamp_only: bool,
-    reject_conditions: bool,
-    reject_ranges: bool,
+    behavior: StorageBehavior,
 }
 
 impl ETagMemoryBackend {
@@ -222,9 +228,9 @@ impl ETagMemoryBackend {
     }
 
     fn metadata(&self, entry: &FileEntry) -> Metadata {
-        if self.omit_identity {
+        if self.behavior.omit_identity {
             MetadataBuilder::file(entry.data.len() as u64).build()
-        } else if self.timestamp_only {
+        } else if self.behavior.timestamp_only {
             let mut metadata = MetadataBuilder::file(entry.data.len() as u64);
             metadata.last_modified(Timestamp::from_second(1_900_000_000).unwrap());
             metadata.build()
@@ -370,33 +376,30 @@ impl ETagMemoryBackend {
 #[derive(Default, Debug)]
 pub struct ETagMemoryBuilder {
     test_hooks: Option<TestHooks>,
-    omit_identity: bool,
-    timestamp_only: bool,
-    reject_conditions: bool,
-    reject_ranges: bool,
+    behavior: StorageBehavior,
 }
 
 impl ETagMemoryBuilder {
-    /// Reject bounded reads to exercise callers that must fall back to a whole-file snapshot.
+    /// Simulate storage that permits only whole-object reads.
     pub fn without_range_reads(mut self) -> Self {
-        self.reject_ranges = true;
+        self.behavior.reject_ranges = true;
         self
     }
-    /// Use a fixed timestamp so same-size replacements cannot be distinguished without `ETags`.
+    /// Simulate timestamp-only storage with coarse modification times.
     pub fn with_timestamp_only(mut self) -> Self {
-        self.timestamp_only = true;
+        self.behavior.timestamp_only = true;
         self
     }
 
-    /// Omit version metadata to exercise storage without conditional-read guarantees.
+    /// Simulate storage that provides no object-version metadata.
     pub fn without_identity(mut self) -> Self {
-        self.omit_identity = true;
+        self.behavior.omit_identity = true;
         self
     }
 
-    /// Retain `ETags` but reject read conditions to exercise post-read validation.
+    /// Simulate a store that returns `ETags` but rejects conditional reads.
     pub fn without_conditional_reads(mut self) -> Self {
-        self.reject_conditions = true;
+        self.behavior.reject_conditions = true;
         self
     }
     pub fn with_test_hooks(mut self, hooks: TestHooks) -> Self {
@@ -414,10 +417,7 @@ impl Builder for ETagMemoryBuilder {
         } else {
             ETagMemoryBackend::new()
         };
-        backend.omit_identity = self.omit_identity;
-        backend.timestamp_only = self.timestamp_only;
-        backend.reject_conditions = self.reject_conditions;
-        backend.reject_ranges = self.reject_ranges;
+        backend.behavior = self.behavior;
         Ok(backend)
     }
 }
@@ -440,8 +440,8 @@ impl Service for ETagMemoryBackend {
             stat_with_if_match: true,
             stat_with_if_none_match: true,
             read: true,
-            read_with_if_match: !self.reject_conditions,
-            read_with_if_none_match: !self.reject_conditions,
+            read_with_if_match: !self.behavior.reject_conditions,
+            read_with_if_none_match: !self.behavior.reject_conditions,
             write: true,
             write_can_empty: true,
             write_with_if_match: true,
@@ -591,7 +591,7 @@ pub struct ETagMemoryReader {
 
 impl oio::StreamRead for ETagMemoryReader {
     async fn open(&self, range: BytesRange) -> Result<(RpRead, Box<dyn oio::ReadStreamDyn>)> {
-        if self.backend.reject_ranges && (range.offset() != 0 || range.size().is_some()) {
+        if self.backend.behavior.reject_ranges && (range.offset() != 0 || range.size().is_some()) {
             return Err(Error::new(
                 ErrorKind::Unsupported,
                 "range reads unavailable",

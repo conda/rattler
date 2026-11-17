@@ -1,7 +1,8 @@
-//! Read `.conda` records without retaining the payload when object identity is available.
-//! Unversioned storage and unsupported ZIP layouts use a single buffered snapshot.
+//! Hash `ETag`-guarded archives with one sequential GET and read their info component
+//! with bounded ranges. Unversioned storage and unsupported ZIP layouts use a buffered read.
 
 use std::{
+    collections::HashSet,
     error::Error as StdError,
     io::{self, Write},
 };
@@ -17,31 +18,69 @@ use tokio::task::{consume_budget, spawn_blocking};
 use zstd::stream::read::Decoder;
 
 use crate::{
-    IndexedPackageRecord, RepodataFileMetadata, read_indexed_json_from_archive,
+    ArchiveDigests, IndexedPackageRecord, RepodataFileMetadata, read_indexed_json_from_archive,
     utils::read_with_metadata_check,
 };
 
-// Bound ZIP-directory/header requests; the archive hash uses one continuous GET.
 const METADATA_CHUNK: usize = 64 * 1024;
+const HASH_CHUNK: usize = 8 * 1024;
 
-/// Return metadata and whole-archive digests suitable for a repodata record.
-///
-/// With an `ETag`, one sequential read hashes the archive and bounded range reads
-/// fetch its info component. Every read uses the same version condition; callers
-/// must retry the entire operation on `ConditionNotMatch`. If conditions are
-/// disabled, a final stat detects replacement before the record can be cached.
-///
-/// Storage without `ETags` uses one immutable snapshot because timestamps cannot
-/// establish consistency across separate reads. ZIP layouts rejected by the
-/// range parser also use that compatibility path. Storage I/O remains async and
-/// cancellable; synchronous parsing and buffered hashing use the blocking pool.
+/// Collect both whole-archive hashes and the byte count in one pass.
+struct ArchiveHasher {
+    writer: HashingWriter<HashingWriter<io::Sink, Sha256>, Md5>,
+    size: u64,
+}
+
+impl ArchiveHasher {
+    /// Discard payload bytes after feeding both digest writers.
+    fn new() -> Self {
+        Self {
+            writer: HashingWriter::new(HashingWriter::new(io::sink())),
+            size: 0,
+        }
+    }
+
+    /// Include a chunk in both digests and the final archive size.
+    fn update(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.writer.write_all(bytes)?;
+        self.size += bytes.len() as u64;
+        Ok(())
+    }
+
+    /// Supply all fields required to construct a complete package record.
+    fn finish(self) -> ArchiveDigests {
+        let (sha256, md5) = self.writer.finalize();
+        let (_, sha256) = sha256.finalize();
+        ArchiveDigests {
+            md5,
+            sha256,
+            size: self.size,
+        }
+    }
+}
+
+/// Distinguish ZIP fallback decisions from storage errors that may need a retry.
+#[derive(Debug)]
+enum MetadataReadError {
+    UnsupportedLayout,
+    Storage(Error),
+}
+
+impl From<Error> for MetadataReadError {
+    fn from(error: Error) -> Self {
+        Self::Storage(error)
+    }
+}
+
+/// Return metadata and digests from one archive version, falling back to a buffered read.
+/// Conditional reads rely on the backend enforcing `If-Match`; disabled conditions
+/// use an `ETag` check after parsing, and replacement errors must retry the whole operation.
 pub(crate) async fn read_package(
     op: &Operator,
     path: &str,
     metadata: &RepodataFileMetadata,
 ) -> opendal::Result<IndexedPackageRecord> {
-    // Timestamps can miss same-size replacements within their resolution.
-    // Without an ETag, preserve the original single-read snapshot.
+    // Timestamps cannot establish identity across separate reads.
     if metadata.etag.is_none() {
         return buffered_record(op, path, metadata).await;
     }
@@ -49,52 +88,47 @@ pub(crate) async fn read_package(
     if metadata.precondition_checks.is_enabled() {
         options.if_match = metadata.etag.clone();
     }
-    let reader = op.reader_options(path, options.clone()).await?;
-    let mut source = reader.clone().into_futures_async_read(..).await?;
-    let mut hashes = HashingWriter::<_, Md5>::new(HashingWriter::<_, Sha256>::new(io::sink()));
-    let mut size = 0u64;
+    let hash_reader = op.reader_options(path, options.clone()).await?;
+    let mut source = hash_reader.clone().into_futures_async_read(..).await?;
+    let mut hasher = ArchiveHasher::new();
     loop {
         let chunk = source.fill_buf().await.map_err(storage_error)?;
         if chunk.is_empty() {
             break;
         }
-        // Keep hashing work bounded per budget unit, even for whole-archive buffers.
-        let chunk = &chunk[..chunk.len().min(8 * 1024)];
-        hashes.write_all(chunk).map_err(storage_error)?;
+        // Check the cooperative budget every 8 KiB so ready buffers cannot starve the executor.
+        let chunk = &chunk[..chunk.len().min(HASH_CHUNK)];
+        hasher.update(chunk).map_err(storage_error)?;
         let length = chunk.len();
-        size += length as u64;
         source.consume_unpin(length);
         consume_budget().await;
     }
-    let (sha256, md5) = hashes.finalize();
-    let (_, sha256) = sha256.finalize();
-
+    let digests = hasher.finish();
     options.chunk = Some(METADATA_CHUNK);
     options.concurrent = 1;
-    let directory = op.reader_options(path, options).await?;
-    let info = match metadata_bytes(&reader, directory, size).await {
+    let range_reader = op.reader_options(path, options).await?;
+    // Either fallback rereads and hashes the full archive again.
+    let info = match metadata_bytes(&hash_reader, range_reader, digests.size).await {
         Ok(info) => info,
-        // The legacy parser also accepts ZIP layouts rejected by async ZIP.
-        Err(error) if error.kind() == ErrorKind::Unsupported => {
+        Err(MetadataReadError::UnsupportedLayout) => {
             return buffered_record(op, path, metadata).await;
         }
-        Err(error) => return Err(error),
+        Err(MetadataReadError::Storage(error)) if error.kind() == ErrorKind::Unsupported => {
+            // A whole-file read still works when range reads are unavailable.
+            return buffered_record(op, path, metadata).await;
+        }
+        Err(MetadataReadError::Storage(error)) => return Err(error),
     };
-    let mut indexed = spawn_blocking(move || {
+    let indexed = spawn_blocking(move || {
         let decoder = Decoder::new(info.reader())?;
-        read_indexed_json_from_archive(None, &mut Archive::new(decoder))
+        read_indexed_json_from_archive(digests, &mut Archive::new(decoder))
     })
     .await
     .map_err(|error| Error::new(ErrorKind::Unexpected, "metadata worker failed").set_source(error))?
     .map_err(storage_error)?;
-    indexed.record.md5 = Some(md5);
-    indexed.record.sha256 = Some(sha256);
-    indexed.record.size = Some(size);
-
     if !metadata.precondition_checks.is_enabled() {
-        // The retry loop already captured this ETag before hashing.
         let after = op.stat(path).await?;
-        if metadata.etag.as_deref() != after.etag() || after.content_length() != size {
+        if metadata.etag.as_deref() != after.etag() {
             return Err(Error::new(
                 ErrorKind::ConditionNotMatch,
                 "archive changed while indexing",
@@ -104,59 +138,60 @@ pub(crate) async fn read_package(
     Ok(indexed)
 }
 
-/// Distinguish unsupported ZIP layouts from storage failures so only format
-/// incompatibility falls back to buffering; replacement errors must reach retries.
-fn zip_error(error: ZipError) -> Error {
+/// Keep I/O errors retryable and send ZIP format rejections to the buffered parser.
+fn zip_error(error: ZipError) -> MetadataReadError {
     match error {
-        ZipError::UpstreamReadError(error) => storage_error(error),
-        // A format rejection must use the compatible snapshot parser.
-        error => Error::new(ErrorKind::Unsupported, "unsupported ZIP layout").set_source(error),
+        ZipError::UpstreamReadError(error) => MetadataReadError::Storage(storage_error(error)),
+        _ => MetadataReadError::UnsupportedLayout,
     }
 }
 
-/// Locate the info component through the central directory and fetch only its
-/// compressed bytes. A separately chunked reader keeps ZIP seeks from requesting
-/// the rest of a large payload; the hash reader retains its one sequential GET.
-async fn metadata_bytes(reader: &Reader, directory: Reader, size: u64) -> opendal::Result<Buffer> {
-    let source = directory.into_futures_async_read(0..size).await?;
+/// Fetch the compressed info component using bounded directory/header reads.
+/// A separate range reader prevents ZIP seeks from downloading the remaining payload.
+async fn metadata_bytes(
+    hash_reader: &Reader,
+    range_reader: Reader,
+    size: u64,
+) -> Result<Buffer, MetadataReadError> {
+    let source = range_reader.into_futures_async_read(0..size).await?;
     let mut archive = ZipFileReader::new(source).await.map_err(zip_error)?;
-    let entries = archive.file().entries();
-    let entry = entries
-        .iter()
-        .find(|entry| {
+    let (index, length) = {
+        let entries = archive.file().entries();
+        let mut names = HashSet::new();
+        if entries
+            .iter()
+            .any(|entry| !names.insert(entry.filename().as_bytes()))
+        {
+            return Err(MetadataReadError::UnsupportedLayout);
+        }
+        // The package-streaming reader uses this naming test but does not expose a helper.
+        let mut info = entries.iter().enumerate().filter(|(_, entry)| {
             entry
                 .filename()
                 .as_str()
                 .is_ok_and(|name| name.starts_with("info-") && name.ends_with(".tar.zst"))
-        })
-        .ok_or_else(|| zip_error(ZipError::EntryIndexOutOfBounds))?;
-    // The legacy ZIP reader keeps the last duplicate of the first matching name.
-    let (index, entry) = entries
-        .iter()
-        .enumerate()
-        .rfind(|(_, candidate)| candidate.filename().as_bytes() == entry.filename().as_bytes())
-        .expect("the selected entry is present");
-    if entry.compression() != Compression::Stored {
-        return Err(zip_error(ZipError::FeatureNotSupported(
-            "compressed .conda ZIP entries",
-        )));
-    }
-    let length = entry.compressed_size();
-    // The ZIP parser validates bounds and locates data using the local header;
-    // its extra-field length may differ from that in the central directory.
+        });
+        let (index, entry) = info.next().ok_or(MetadataReadError::UnsupportedLayout)?;
+        if info.next().is_some() || entry.compression() != Compression::Stored {
+            return Err(MetadataReadError::UnsupportedLayout);
+        }
+        (index, entry.compressed_size())
+    };
+    // Advance past the local header so stream_position below gives the component's data offset.
     drop(archive.reader_with_entry(index).await.map_err(zip_error)?);
     let start = archive
         .inner_mut()
         .stream_position()
         .await
-        .map_err(storage_error)?;
-    // Request exactly the metadata component, rather than offset..EOF.
-    reader.read(start..start + length).await
+        .map_err(|error| MetadataReadError::Storage(storage_error(error)))?;
+    hash_reader
+        .read(start..start + length)
+        .await
+        .map_err(MetadataReadError::Storage)
 }
 
-/// Preserve the legacy single-snapshot guarantee when separate guarded reads
-/// are unavailable. Finish I/O before spawning CPU work to avoid blocking-pool
-/// deadlocks on filesystem backends that also use that pool.
+/// Read one immutable archive before starting CPU work on the blocking pool.
+/// Finishing I/O first prevents filesystem reads from deadlocking that same pool.
 async fn buffered_record(
     op: &Operator,
     path: &str,
@@ -171,26 +206,18 @@ async fn buffered_record(
         .map_err(storage_error)
 }
 
-/// Hash and parse one immutable buffer without coalescing its segments into
-/// another archive-sized allocation. The seek parser preserves legacy ZIP support.
+/// Hash and parse an immutable buffer without copying its segments into another archive-sized allocation.
 fn buffered_snapshot(buffer: Buffer) -> io::Result<IndexedPackageRecord> {
-    let mut hashes = HashingWriter::<_, Md5>::new(HashingWriter::<_, Sha256>::new(io::sink()));
+    let mut hasher = ArchiveHasher::new();
     for chunk in buffer.clone() {
-        hashes.write_all(&chunk)?;
+        hasher.update(&chunk)?;
     }
-    let (sha256, md5) = hashes.finalize();
-    let (_, sha256) = sha256.finalize();
-    let size = buffer.len() as u64;
     let mut archive = stream_conda_info(BufferCursor::new(buffer)).map_err(io::Error::other)?;
-    let mut indexed = read_indexed_json_from_archive(None, &mut archive)?;
-    indexed.record.md5 = Some(md5);
-    indexed.record.sha256 = Some(sha256);
-    indexed.record.size = Some(size);
-    Ok(indexed)
+    read_indexed_json_from_archive(hasher.finish(), &mut archive)
 }
 
-/// Preserve storage error kinds through ZIP/I/O wrappers so a replacement during
-/// a later range request retries the whole record instead of becoming a parse error.
+/// Recover storage errors from async ZIP's `UpstreamReadError` and the nested
+/// `io::Error` wrappers used by `OpenDAL`'s futures reader, preserving replacement retries.
 fn storage_error(error: io::Error) -> Error {
     let mut source: &(dyn StdError + 'static) = &error;
     let kind = loop {
