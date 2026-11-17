@@ -1,3 +1,6 @@
+use std::path::Path;
+
+use fs_err as fs;
 use miette::IntoDiagnostic;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use reqwest::Client;
@@ -80,7 +83,9 @@ pub struct UploadResponse {
     /// The pre-signed URL for uploading file data.
     pub upload_url: String,
     /// Form fields required for single-part upload (S3 pre-signed POST).
-    pub upload_fields: serde_json::Map<String, serde_json::Value>,
+    /// Null or omitted for multi-part (`put_parts`) uploads.
+    #[serde(default)]
+    pub upload_fields: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// Response from the Cloudsmith package creation endpoint.
@@ -163,7 +168,12 @@ impl Cloudsmith {
             return Err(CloudsmithError::UploadRequestFailed { status, body });
         }
 
-        let upload_resp: UploadResponse = resp.json().await.into_diagnostic()?;
+        let body = resp.text().await.into_diagnostic()?;
+        let upload_resp: UploadResponse = serde_json::from_str(&body).map_err(|err| {
+            miette::miette!(
+                "failed to parse Cloudsmith upload slot response: {err}\nResponse body: {body}"
+            )
+        })?;
         debug!(
             "upload slot assigned for {filename}: identifier={}",
             upload_resp.identifier
@@ -176,7 +186,7 @@ impl Cloudsmith {
         &self,
         upload_url: &str,
         upload_fields: &serde_json::Map<String, serde_json::Value>,
-        file_path: &std::path::Path,
+        file_path: &Path,
     ) -> Result<(), CloudsmithError> {
         let filename = file_path
             .file_name()
@@ -194,7 +204,7 @@ impl Cloudsmith {
             form = form.text(key.clone(), value.clone());
         }
 
-        let content = fs_err::tokio::read(file_path).await.into_diagnostic()?;
+        let content = fs::read(file_path).into_diagnostic()?;
         form = form.part("file", Part::bytes(content).file_name(filename.to_string()));
 
         let resp = reqwest::Client::new()
@@ -216,7 +226,7 @@ impl Cloudsmith {
         &self,
         upload_url: &str,
         upload_id: &str,
-        file_path: &std::path::Path,
+        file_path: &Path,
     ) -> Result<(), CloudsmithError> {
         let filename = file_path
             .file_name()
@@ -225,24 +235,22 @@ impl Cloudsmith {
 
         debug!("uploading {filename} (multi-part) to pre-signed URL");
 
-        let content = fs_err::tokio::read(file_path).await.into_diagnostic()?;
+        let content = fs::read(file_path).into_diagnostic()?;
         let total_chunks = content.len().div_ceil(CHUNK_SIZE);
         info!(
             "uploading {filename} ({} bytes, {total_chunks} chunks)",
             content.len()
         );
-        for (chunk_number, chunk) in content.chunks(CHUNK_SIZE).enumerate() {
-            debug!(
-                "uploading chunk {}/{total_chunks} for {filename}",
-                chunk_number + 1
-            );
+        for (chunk_index, chunk) in content.chunks(CHUNK_SIZE).enumerate() {
+            let part_number = chunk_index + 1;
+            debug!("uploading chunk {part_number}/{total_chunks} for {filename}");
 
             let resp = reqwest::Client::new()
                 .put(upload_url)
                 .header("X-Api-Key", &self.api_key)
                 .query(&[
                     ("upload_id", upload_id),
-                    ("part_number", &chunk_number.to_string()),
+                    ("part_number", &part_number.to_string()),
                 ])
                 .body(chunk.to_vec())
                 .send()
@@ -264,7 +272,10 @@ impl Cloudsmith {
     async fn complete_upload(&self, upload_id: &str) -> Result<(), CloudsmithError> {
         let url = self
             .url
-            .join(&format!("files/{}/{}/complete/", self.owner, self.repo))
+            .join(&format!(
+                "files/{}/{}/{}/complete/",
+                self.owner, self.repo, upload_id
+            ))
             .into_diagnostic()?;
 
         debug!("completing multi-part upload {upload_id}");
@@ -331,7 +342,7 @@ impl Cloudsmith {
 mod test {
     use std::net::SocketAddr;
 
-    use axum::{Router, http::StatusCode, routing::post};
+    use axum::{Router, extract::Path as AxumPath, http::StatusCode, routing::post};
     use url::Url;
 
     use super::Cloudsmith;
@@ -388,7 +399,7 @@ mod test {
     #[tokio::test]
     async fn test_cloudsmith_multipart_upload_flow() {
         use std::sync::Arc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
@@ -400,19 +411,23 @@ mod test {
         let chunk_count = Arc::new(AtomicUsize::new(0));
         let chunk_count_clone = chunk_count.clone();
 
+        let completion_called_with_id = Arc::new(AtomicBool::new(false));
+        let completion_called_with_id_clone = completion_called_with_id.clone();
+
         let upload_handler = {
             let base_url = base_url.clone();
             move || {
                 let base_url = base_url.clone();
                 async move {
                     let upload_url = base_url.join("s3-upload").unwrap();
+                    // Real Cloudsmith put_parts returns upload_fields: null
                     (
                         StatusCode::OK,
                         [("content-type", "application/json")],
                         serde_json::json!({
                             "identifier": "multipart-test-id",
                             "upload_url": upload_url.to_string(),
-                            "upload_fields": {}
+                            "upload_fields": null
                         })
                         .to_string(),
                     )
@@ -426,18 +441,42 @@ mod test {
                 "/s3-upload",
                 axum::routing::put({
                     let chunk_count = chunk_count_clone;
-                    move || {
+                    move |uri: axum::http::Uri| {
                         let chunk_count = chunk_count.clone();
                         async move {
-                            chunk_count.fetch_add(1, Ordering::SeqCst);
+                            // Verify part_number starts at 1 from the query string
+                            let query = uri.query().unwrap_or_default();
+                            let mut part_number = None;
+                            for pair in query.split('&') {
+                                if let Some((k, v)) = pair.split_once('=')
+                                    && k == "part_number"
+                                {
+                                    part_number = Some(v);
+                                }
+                            }
+                            let current_count = chunk_count.fetch_add(1, Ordering::SeqCst);
+                            assert_eq!(part_number, Some((current_count + 1).to_string().as_str()));
                             StatusCode::OK
                         }
                     }
                 }),
             )
             .route(
-                "/files/{owner}/{repo}/complete/",
-                post(|| async { StatusCode::OK }),
+                "/files/{owner}/{repo}/{identifier}/complete/",
+                post(
+                    move |AxumPath((_owner, _repo, identifier)): AxumPath<(
+                        String,
+                        String,
+                        String,
+                    )>| {
+                        let completion_called = completion_called_with_id_clone.clone();
+                        async move {
+                            assert_eq!(identifier, "multipart-test-id");
+                            completion_called.store(true, Ordering::SeqCst);
+                            StatusCode::OK
+                        }
+                    },
+                ),
             )
             .route(
                 "/packages/{owner}/{repo}/upload/conda/",
@@ -473,6 +512,7 @@ mod test {
             .expect("request_upload failed");
 
         assert_eq!(upload_resp.identifier, "multipart-test-id");
+        assert!(upload_resp.upload_fields.is_none());
 
         let result = client
             .upload_file_multipart(
@@ -485,6 +525,7 @@ mod test {
 
         // The test package is small, so we expect exactly 1 chunk
         assert!(chunk_count.load(Ordering::SeqCst) >= 1);
+        assert!(completion_called_with_id.load(Ordering::SeqCst));
 
         let pkg = client
             .create_package(&upload_resp.identifier, false)

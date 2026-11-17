@@ -336,12 +336,11 @@ pub async fn upload_package_to_cloudsmith(
                 )
                 .await?;
         } else {
+            let upload_fields = upload_response.upload_fields.as_ref().ok_or_else(|| {
+                miette::miette!("Cloudsmith single-part upload response missing upload_fields")
+            })?;
             client
-                .upload_file_single(
-                    &upload_response.upload_url,
-                    &upload_response.upload_fields,
-                    package_file,
-                )
+                .upload_file_single(&upload_response.upload_url, upload_fields, package_file)
                 .await?;
         }
 
