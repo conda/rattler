@@ -3643,6 +3643,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libyaml-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e126dda6f34391ab7b444f9922055facc83c07a910da3eb16f1e4d9c45dc777"
+
+[[package]]
 name = "libz-sys"
 version = "1.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5354,10 +5360,10 @@ dependencies = [
  "serde-saphyr",
  "serde-untagged",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "thiserror 2.0.21",
  "url",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -5403,7 +5409,6 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "serde_with",
- "serde_yaml",
  "simd-json",
  "smallvec",
  "strum",
@@ -5413,6 +5418,7 @@ dependencies = [
  "tracing",
  "typed-path",
  "url",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -5587,13 +5593,13 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "serde_with",
- "serde_yaml",
  "similar-asserts",
  "thiserror 2.0.21",
  "tracing",
  "typed-path",
  "url",
  "xxhash-rust",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -5980,7 +5986,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "serde_yaml",
  "sha2 0.11.1",
  "sigstore-sign",
  "sigstore-trust-root",
@@ -5990,6 +5995,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -6980,19 +6986,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap 2.14.2",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -8250,12 +8243,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
 name = "unscanny"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8975,6 +8962,19 @@ name = "xxhash-rust"
 version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40de123dbb523ebcc00d61ec01840ad192578afc378d859f3429caa38308fad5"
+
+[[package]]
+name = "yaml_serde"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33b729a08a9a6be689bbad3e2bf8015926db54b6622cc89c3a5f7dc174b9e918"
+dependencies = [
+ "indexmap 2.14.2",
+ "itoa",
+ "libyaml-rs",
+ "ryu",
+ "serde",
+]
 
 [[package]]
 name = "yoke"
