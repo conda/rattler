@@ -84,6 +84,26 @@ pub(crate) async fn read_package(
     if metadata.etag.is_none() {
         return buffered_record(op, path, metadata).await;
     }
+    let result = read_version(op, path, metadata).await;
+    // A replacement can invalidate ZIP offsets, so failed reads need validation too.
+    if !metadata.precondition_checks.is_enabled() {
+        let after = op.stat(path).await?;
+        if metadata.etag.as_deref() != after.etag() {
+            return Err(Error::new(
+                ErrorKind::ConditionNotMatch,
+                "archive changed while indexing",
+            ));
+        }
+    }
+    result
+}
+
+/// Keep attempt errors pending until the caller can validate unguarded reads.
+async fn read_version(
+    op: &Operator,
+    path: &str,
+    metadata: &RepodataFileMetadata,
+) -> opendal::Result<IndexedPackageRecord> {
     let mut options = ReaderOptions::default();
     if metadata.precondition_checks.is_enabled() {
         options.if_match = metadata.etag.clone();
@@ -119,23 +139,13 @@ pub(crate) async fn read_package(
         }
         Err(MetadataReadError::Storage(error)) => return Err(error),
     };
-    let indexed = spawn_blocking(move || {
+    spawn_blocking(move || {
         let decoder = Decoder::new(info.reader())?;
         read_indexed_json_from_archive(digests, &mut Archive::new(decoder))
     })
     .await
     .map_err(|error| Error::new(ErrorKind::Unexpected, "metadata worker failed").set_source(error))?
-    .map_err(storage_error)?;
-    if !metadata.precondition_checks.is_enabled() {
-        let after = op.stat(path).await?;
-        if metadata.etag.as_deref() != after.etag() {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                "archive changed while indexing",
-            ));
-        }
-    }
-    Ok(indexed)
+    .map_err(storage_error)
 }
 
 /// Keep I/O errors retryable and send ZIP format rejections to the buffered parser.

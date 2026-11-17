@@ -304,6 +304,42 @@ async fn changed_archive_retries_the_whole_record_with_or_without_read_condition
     }
 }
 
+/// A replacement can invalidate ZIP offsets and cause decoding to fail before a record exists.
+#[tokio::test]
+async fn replacement_before_info_read_retries_instead_of_returning_a_parse_error() {
+    let payload = encode_all(Cursor::new(vec![0; 4096]), 1).unwrap();
+    let initial = fixture_with_payload("1.0", true, false, &payload);
+    let replacement = fixture_with_payload("1.0", false, false, &payload);
+    assert_eq!(initial.len(), replacement.len());
+    let expected = indexed_package_record_from_conda_reader(Cursor::new(&replacement)).unwrap();
+
+    // Count the baseline reads so the trigger follows the final info GET if ZIP seeks change.
+    let (op, mut metadata, reads) = replace_archive_on_read(
+        ETagMemoryBuilder::default().without_conditional_reads(),
+        initial.clone(),
+        replacement.clone(),
+        (Operation::BeforeRead, usize::MAX),
+    )
+    .await;
+    metadata.precondition_checks = PreconditionChecks::Disabled;
+    read_package(&op, "test.conda", &metadata).await.unwrap();
+    let last_read = reads.load(Ordering::SeqCst) - 1;
+
+    let (op, metadata, _) = replace_archive_on_read(
+        ETagMemoryBuilder::default().without_conditional_reads(),
+        initial,
+        replacement,
+        (Operation::BeforeRead, last_read),
+    )
+    .await;
+    let original_etag = metadata.etag.clone();
+    let (actual, final_metadata) = read_package_record_with_retry(&op, "test.conda", metadata)
+        .await
+        .unwrap();
+    assert_records_match(&actual, &expected);
+    assert_ne!(final_metadata.etag, original_etag);
+}
+
 // Cancellation and executor safety.
 
 /// Filesystem I/O also uses the blocking pool, so parsing must not hold its only worker during reads.
