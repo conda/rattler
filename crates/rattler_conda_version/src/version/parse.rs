@@ -315,21 +315,29 @@ fn version_part_parser<'i>(
                     }
                     (rest, (None, dash_or_underscore)) if separator == '-' || separator == '_' => {
                         // We are parsing a single dash or underscore (".._"), update the last
-                        // segment we added
-                        let segment = segments
+                        // segment we added.
+                        // Per CEP 33: "Trailing underscores are considered part of the preceding string, if any."
+                        let last_component = components
                             .last_mut()
-                            .expect("there must be at least one segment added");
-                        components.push(Component::UnderscoreOrDash {
-                            is_dash: separator == '-',
-                        });
+                            .expect("there must be at least one component");
+                        if let Component::Iden(iden) = last_component {
+                            *last_component = Component::Iden(format!("{iden}_").into_boxed_str());
+                        } else {
+                            let segment = segments
+                                .last_mut()
+                                .expect("there must be at least one segment added");
+                            components.push(Component::UnderscoreOrDash {
+                                is_dash: separator == '-',
+                            });
 
-                        *segment = segment
-                            .len()
-                            .checked_add(1)
-                            .and_then(|len| segment.with_component_count(len))
-                            .ok_or(nom::Err::Failure(
-                                ParseVersionErrorKind::TooManyComponentsInASegment,
-                            ))?;
+                            *segment = segment
+                                .len()
+                                .checked_add(1)
+                                .and_then(|len| segment.with_component_count(len))
+                                .ok_or(nom::Err::Failure(
+                                    ParseVersionErrorKind::TooManyComponentsInASegment,
+                                ))?;
+                        }
 
                         // Since the trailing is always at the end we immediately return
                         return Ok((rest, dash_or_underscore));
@@ -545,5 +553,38 @@ mod test {
             );
             assert_eq!(parsed_version_debug_string, debug_parsed);
         }
+    }
+
+    #[test]
+    fn test_trailing_underscore_after_letters() {
+        // Issue #3196: Per CEP 33, trailing underscore belongs to the preceding string component if any.
+        // Therefore, 'a' < 'a_' ensures 1.0a < 1.0a_, 3.7b < 3.7b_, etc.
+        let v1_0a = Version::from_str("1.0a").unwrap();
+        let v1_0a_ = Version::from_str("1.0a_").unwrap();
+        assert!(v1_0a < v1_0a_);
+
+        let v3_7b = Version::from_str("3.7b").unwrap();
+        let v3_7b_ = Version::from_str("3.7b_").unwrap();
+        assert!(v3_7b < v3_7b_);
+
+        let vepoch = Version::from_str("1!2.15.1alpha").unwrap();
+        let vepoch_ = Version::from_str("1!2.15.1alpha_").unwrap();
+        assert!(vepoch < vepoch_);
+
+        // Openssl 1.x style comparisons still hold: 1.0.1_ < 1.0.1a
+        let v_openssl = Version::from_str("1.0.1_").unwrap();
+        let v_openssla = Version::from_str("1.0.1a").unwrap();
+        assert!(v_openssl < v_openssla);
+
+        // VersionSpec matching for tmux packages on conda-forge
+        let spec =
+            crate::VersionSpec::from_str(">=3.7b,<3.7c", crate::ParseStrictness::Lenient).unwrap();
+        let tmux_candidates = ["3.7_", "3.7b_", "3.7c_", "3.8_"];
+        let matched: Vec<_> = tmux_candidates
+            .iter()
+            .copied()
+            .filter(|v| spec.matches(&Version::from_str(v).unwrap()))
+            .collect();
+        assert_eq!(matched, vec!["3.7b_"]);
     }
 }
