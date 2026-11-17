@@ -39,7 +39,7 @@ json-patch = { workspace = true }
 self_cell = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pin-project-lite = { workspace = true }
-rattler_conda_types = { workspace = true, default-features = false, optional = true }
+rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "http2"] }
@@ -113,7 +113,9 @@ url = { workspace = true }
 default = ['rustls']
 native-tls = ['reqwest/native-tls', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
 rustls = ['reqwest/rustls', 'rattler_networking/rustls', 'rattler_cache/rustls', 'rattler_redaction/rustls']
-sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
+# No-op kept for backward compatibility, `rattler_conda_types` is always a dependency.
+rattler_conda_types = []
+sparse = ["memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
 
 [package.metadata.docs.rs]

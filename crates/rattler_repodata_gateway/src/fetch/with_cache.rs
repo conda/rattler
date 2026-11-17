@@ -562,8 +562,8 @@ async fn stream_and_decode_to_file(
     );
 
     // Construct a temporary file
-    let temp_file =
-        NamedTempFile::new_in(temp_dir).map_err(FetchRepoDataError::FailedToCreateTemporaryFile)?;
+    let temp_file = rattler_conda_types::utils::shared_tempfile_in(temp_dir)
+        .map_err(FetchRepoDataError::FailedToCreateTemporaryFile)?;
 
     // Clone the file handle and create a hashing writer so we can compute a hash
     // while the content is being written to disk.
@@ -1112,11 +1112,11 @@ mod test {
         let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel with an empty cache.
-        let cache_dir = TempDir::new().unwrap();
+        let cache_dir = TempDir::new().unwrap().keep();
         let result = fetch_repo_data(
             server.url(),
             LazyClient::default(),
-            cache_dir.keep(),
+            cache_dir.clone(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1128,9 +1128,20 @@ mod test {
             hex!("a1861e448e4a62b88dce47c95351bfbe7fc22451a73f89a09d782492540e0675")[..]
         );
         assert_eq!(
-            std::fs::read_to_string(result.repo_data_json_path).unwrap(),
+            std::fs::read_to_string(&result.repo_data_json_path).unwrap(),
             FAKE_REPO_DATA
         );
+
+        // The cache may be shared, so it must respect the umask like
+        // `File::create`.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            let reference = cache_dir.join("reference");
+            std::fs::File::create(&reference).unwrap();
+            assert_eq!(mode(&result.repo_data_json_path), mode(&reference));
+        }
     }
 
     #[tracing_test::traced_test]

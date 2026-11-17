@@ -182,6 +182,26 @@ mod tests {
 
     use super::*;
 
+    /// Credentials must stay readable only by their owner, whatever the umask.
+    #[cfg(unix)]
+    #[test]
+    fn credentials_file_stays_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        let storage = FileStorage::from_path(path.clone()).unwrap();
+        storage
+            .store(
+                "example.com",
+                &Authentication::BearerToken("secret".to_string()),
+            )
+            .unwrap();
+
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
     #[test]
     fn test_file_storage() {
         let file = tempdir().unwrap();
