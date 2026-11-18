@@ -220,6 +220,15 @@ pub struct ArtifactoryOpts {
     /// Your Artifactory token for bearer authentication.
     #[arg(short, long, env = "ARTIFACTORY_TOKEN", conflicts_with_all = ["username", "password"])]
     pub token: Option<String>,
+
+    /// Skip upload if package already exists
+    #[arg(
+        short,
+        long,
+        alias = "skip-if-exists",
+        env = "ARTIFACTORY_SKIP_EXISTING"
+    )]
+    pub skip_existing: bool,
 }
 
 /// Authentication provided directly for an Artifactory upload.
@@ -237,23 +246,27 @@ pub struct ArtifactoryData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
     pub authentication: Option<ArtifactoryAuthentication>,
+    pub skip_existing: SkipExisting,
 }
 
 impl TryFrom<ArtifactoryOpts> for ArtifactoryData {
     type Error = miette::Error;
 
     fn try_from(value: ArtifactoryOpts) -> Result<Self, Self::Error> {
-        let data = Self::new(value.url, value.channels);
+        let mut data =
+            Self::new(value.url, value.channels).with_skip_existing(value.skip_existing.into());
 
         if let Some(username) = value.username {
             let password = value
                 .password
                 .expect("clap guarantees that password is present if username is present");
-            return Ok(data.with_basic_auth(username, password));
+            data = data.with_basic_auth(username, password);
+            return Ok(data);
         }
 
         if let Some(token) = value.token {
-            return Ok(data.with_bearer_auth(token));
+            data = data.with_bearer_auth(token);
+            return Ok(data);
         }
 
         Ok(data)
@@ -267,6 +280,7 @@ impl ArtifactoryData {
             url: url.into(),
             channels,
             authentication: None,
+            skip_existing: SkipExisting(false),
         }
     }
 
@@ -279,6 +293,12 @@ impl ArtifactoryData {
     /// Use HTTP basic authentication with the given username and password.
     pub fn with_basic_auth(mut self, username: String, password: String) -> Self {
         self.authentication = Some(ArtifactoryAuthentication::Basic { username, password });
+        self
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
         self
     }
 }

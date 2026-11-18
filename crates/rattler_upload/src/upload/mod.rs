@@ -221,6 +221,31 @@ pub async fn upload_package_to_artifactory(
             ))
             .into_diagnostic()?;
 
+        if artifactory_data.skip_existing.is_enabled() {
+            let head_request = client.request(Method::HEAD, upload_url.clone());
+            let head_request = match &authentication {
+                Authentication::BearerToken(token) => head_request.bearer_auth(token),
+                Authentication::BasicHTTP { username, password } => {
+                    head_request.basic_auth(username, Some(password))
+                }
+                _ => unreachable!("Artifactory authentication was validated above"),
+            };
+
+            match head_request.send().await {
+                Ok(head_response) if head_response.status() == StatusCode::OK => {
+                    info!("Skip existing package: {package_name}");
+                    continue;
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    let err = Redact::redact(e);
+                    warn!(
+                        "HEAD request to check existing package failed for {package_name}: {err}. Proceeding with upload."
+                    );
+                }
+            }
+        }
+
         let prepared_request = client.request(Method::PUT, upload_url);
         let prepared_request = match &authentication {
             Authentication::BearerToken(token) => prepared_request.bearer_auth(token),
@@ -232,13 +257,13 @@ pub async fn upload_package_to_artifactory(
 
         let response = send_request_with_retry(prepared_request, package_file).await?;
         if response.status() == StatusCode::CONFLICT {
-            let body = response.text().await.into_diagnostic()?;
-            miette::bail!(
-                "Resource conflict: Failed to upload package file: {}\nStatus: {}\nBody: {}",
-                package_file.display(),
-                StatusCode::CONFLICT,
-                body
-            );
+            if artifactory_data.skip_existing.is_enabled() {
+                info!("Skip existing package: {package_name}");
+            } else {
+                return Err(miette::miette!(
+                    "Package {package_name} already exists. Use --skip-existing to skip existing packages."
+                ));
+            }
         }
     }
 
@@ -1077,5 +1102,227 @@ mod test {
         let package_files = vec![test_package_path()];
         let result = upload_package_to_anaconda(&storage, &package_files, anaconda_data).await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[test]
+    fn test_artifactory_opts_skip_existing() {
+        use crate::upload::opt::{ArtifactoryData, ArtifactoryOpts};
+        use clap::Parser;
+
+        let opts_default = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "https://artifactory.example.com",
+            "--channel",
+            "test-channel",
+        ])
+        .unwrap();
+        assert!(!opts_default.skip_existing);
+        let data_default = ArtifactoryData::try_from(opts_default).unwrap();
+        assert!(!data_default.skip_existing.is_enabled());
+
+        let opts_skip = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "https://artifactory.example.com",
+            "--channel",
+            "test-channel",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts_skip.skip_existing);
+        let data_skip = ArtifactoryData::try_from(opts_skip).unwrap();
+        assert!(data_skip.skip_existing.is_enabled());
+
+        let opts_skip_alias = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "https://artifactory.example.com",
+            "--channel",
+            "test-channel",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts_skip_alias.skip_existing);
+
+        let opts_skip_short = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "https://artifactory.example.com",
+            "--channel",
+            "test-channel",
+            "-s",
+        ])
+        .unwrap();
+        assert!(opts_skip_short.skip_existing);
+
+        let opts_with_token = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "https://artifactory.example.com",
+            "--channel",
+            "test-channel",
+            "--token",
+            "secret-token",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts_with_token.skip_existing);
+        let data_with_token = ArtifactoryData::try_from(opts_with_token).unwrap();
+        assert!(data_with_token.skip_existing.is_enabled());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_skip_existing_head() {
+        use crate::upload::opt::SkipExisting;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let head_called = Arc::new(AtomicBool::new(false));
+        let put_called = Arc::new(AtomicBool::new(false));
+
+        let head_called_clone = head_called.clone();
+        let put_called_clone = put_called.clone();
+
+        let handler = move |req: axum::extract::Request| {
+            let head_called = head_called_clone.clone();
+            let put_called = put_called_clone.clone();
+            async move {
+                if req.method() == axum::http::Method::HEAD {
+                    head_called.store(true, Ordering::SeqCst);
+                    StatusCode::OK
+                } else if req.method() == axum::http::Method::PUT {
+                    put_called.store(true, Ordering::SeqCst);
+                    StatusCode::OK
+                } else {
+                    StatusCode::METHOD_NOT_ALLOWED
+                }
+            }
+        };
+
+        let router = Router::new().fallback(handler);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string())
+            .with_bearer_auth("test-token".to_string())
+            .with_skip_existing(SkipExisting(true));
+
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert!(
+            head_called.load(Ordering::SeqCst),
+            "HEAD request should have been sent"
+        );
+        assert!(
+            !put_called.load(Ordering::SeqCst),
+            "PUT request should not have been sent"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_conflict_skip_existing() {
+        use crate::upload::opt::SkipExisting;
+
+        let handler = move |method: axum::http::Method, _body: axum::body::Bytes| async move {
+            if method == axum::http::Method::HEAD {
+                StatusCode::NOT_FOUND
+            } else if method == axum::http::Method::PUT {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::METHOD_NOT_ALLOWED
+            }
+        };
+
+        let router = Router::new().fallback(handler);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+
+        // 1. With skip_existing = false: should fail with error mentioning --skip-existing
+        let artifactory_data = ArtifactoryData::new(url.clone(), "test-channel".to_string())
+            .with_bearer_auth("test-token".to_string())
+            .with_skip_existing(SkipExisting(false));
+
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("--skip-existing"),
+            "Error should mention --skip-existing: {err_msg}"
+        );
+
+        // 2. With skip_existing = true: should succeed (skip)
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string())
+            .with_bearer_auth("test-token".to_string())
+            .with_skip_existing(SkipExisting(true));
+
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_head_error_fallback_to_put() {
+        use crate::upload::opt::SkipExisting;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let head_called = Arc::new(AtomicBool::new(false));
+        let put_called = Arc::new(AtomicBool::new(false));
+
+        let head_called_clone = head_called.clone();
+        let put_called_clone = put_called.clone();
+
+        let handler = move |method: axum::http::Method, _body: axum::body::Bytes| {
+            let head_called = head_called_clone.clone();
+            let put_called = put_called_clone.clone();
+            async move {
+                if method == axum::http::Method::HEAD {
+                    head_called.store(true, Ordering::SeqCst);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                } else if method == axum::http::Method::PUT {
+                    put_called.store(true, Ordering::SeqCst);
+                    StatusCode::OK
+                } else {
+                    StatusCode::METHOD_NOT_ALLOWED
+                }
+            }
+        };
+
+        let router = Router::new().fallback(handler);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string())
+            .with_bearer_auth("test-token".to_string())
+            .with_skip_existing(SkipExisting(true));
+
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert!(
+            head_called.load(Ordering::SeqCst),
+            "HEAD request should have been sent"
+        );
+        assert!(
+            put_called.load(Ordering::SeqCst),
+            "PUT request should have been sent as fallback when HEAD fails"
+        );
     }
 }
