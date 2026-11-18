@@ -55,7 +55,7 @@ pub enum MenuInstError {
     PlistDuplicateError(String),
 
     #[cfg(target_os = "macos")]
-    #[error("failed to sign plist: {0}")]
+    #[error("failed to code sign app bundle: {0}")]
     SigningFailed(String),
 
     #[error("failed to install menu item: {0}")]
