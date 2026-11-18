@@ -510,6 +510,16 @@ pub struct CloudsmithOpts {
     /// Force overwrite existing packages
     #[arg(long, env = "CLOUDSMITH_FORCE")]
     pub force: bool,
+
+    /// Skip upload if package already exists
+    #[arg(
+        short,
+        long,
+        alias = "skip-if-exists",
+        env = "CLOUDSMITH_SKIP_EXISTING",
+        conflicts_with = "force"
+    )]
+    pub skip_existing: bool,
 }
 
 #[derive(Debug)]
@@ -520,11 +530,14 @@ pub struct CloudsmithData {
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
     pub force: ForceOverwrite,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<CloudsmithOpts> for CloudsmithData {
     fn from(value: CloudsmithOpts) -> Self {
-        Self::new(value.owner, value.repo, value.api_key, value.url).with_force(value.force.into())
+        Self::new(value.owner, value.repo, value.api_key, value.url)
+            .with_force(value.force.into())
+            .with_skip_existing(value.skip_existing.into())
     }
 }
 
@@ -539,12 +552,19 @@ impl CloudsmithData {
                 .unwrap_or_else(|| Url::parse("https://api.cloudsmith.io/v1").unwrap())
                 .into(),
             force: ForceOverwrite(false),
+            skip_existing: SkipExisting(false),
         }
     }
 
     /// Set whether to overwrite existing packages.
     pub fn with_force(mut self, force: ForceOverwrite) -> Self {
         self.force = force;
+        self
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
         self
     }
 }
