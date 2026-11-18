@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use fs_err::tokio as fs;
 use miette::IntoDiagnostic;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use reqwest::Client;
@@ -204,7 +203,7 @@ impl Cloudsmith {
             form = form.text(key.clone(), value.clone());
         }
 
-        let content = fs::read(file_path).await.into_diagnostic()?;
+        let content = fs_err::tokio::read(file_path).await.into_diagnostic()?;
         form = form.part("file", Part::bytes(content).file_name(filename.to_string()));
 
         let resp = reqwest::Client::new()
@@ -235,7 +234,7 @@ impl Cloudsmith {
 
         debug!("uploading {filename} (multi-part) to pre-signed URL");
 
-        let content = fs::read(file_path).await.into_diagnostic()?;
+        let content = fs_err::tokio::read(file_path).await.into_diagnostic()?;
         let total_chunks = content.len().div_ceil(CHUNK_SIZE);
         info!(
             "uploading {filename} ({} bytes, {total_chunks} chunks)",
