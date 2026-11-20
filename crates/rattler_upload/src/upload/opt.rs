@@ -147,6 +147,16 @@ pub struct QuetzOpts {
     /// Force overwrite existing packages
     #[arg(long)]
     pub force: bool,
+
+    /// Skip upload if package already exists
+    #[arg(
+        short,
+        long,
+        alias = "skip-if-exists",
+        env = "QUETZ_SKIP_EXISTING",
+        conflicts_with = "force"
+    )]
+    pub skip_existing: bool,
 }
 
 #[derive(Debug)]
@@ -156,11 +166,13 @@ pub struct QuetzData {
     pub channels: String,
     pub api_key: Option<String>,
     pub force: ForceOverwrite,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<QuetzOpts> for QuetzData {
     fn from(value: QuetzOpts) -> Self {
         Self::new(value.url, value.channels, value.api_key, value.force.into())
+            .with_skip_existing(value.skip_existing.into())
     }
 }
 
@@ -172,7 +184,14 @@ impl QuetzData {
             channels,
             api_key,
             force,
+            skip_existing: SkipExisting(false),
         }
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
+        self
     }
 }
 

@@ -15,7 +15,7 @@ use std::{
 };
 use tokio_util::io::ReaderStream;
 
-use miette::{Context, IntoDiagnostic};
+use miette::IntoDiagnostic;
 use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_redaction::Redact;
 use reqwest::{Method, StatusCode};
@@ -135,7 +135,23 @@ pub async fn upload_package_to_quetz(
             .query(&[("force", force), ("sha256", &hash)])
             .header("X-API-Key", token.clone());
 
-        send_request_with_retry(prepared_request, package_file).await?;
+        let response = send_request_with_retry(prepared_request, package_file).await?;
+        if response.status() == StatusCode::CONFLICT {
+            if quetz_data.skip_existing.is_enabled() {
+                info!(
+                    "Skip existing package: {}",
+                    package_file.file_name().unwrap().to_string_lossy()
+                );
+            } else {
+                let body = response.text().await.into_diagnostic()?;
+                miette::bail!(
+                    "Resource conflict: Failed to upload package file: {}\nStatus: {}\nBody: {}\nHelp: use --force to overwrite or --skip-existing to skip",
+                    package_file.display(),
+                    StatusCode::CONFLICT,
+                    body
+                );
+            }
+        }
     }
 
     info!("Packages successfully uploaded to Quetz server");
@@ -214,7 +230,16 @@ pub async fn upload_package_to_artifactory(
             _ => unreachable!("Artifactory authentication was validated above"),
         };
 
-        send_request_with_retry(prepared_request, package_file).await?;
+        let response = send_request_with_retry(prepared_request, package_file).await?;
+        if response.status() == StatusCode::CONFLICT {
+            let body = response.text().await.into_diagnostic()?;
+            miette::bail!(
+                "Resource conflict: Failed to upload package file: {}\nStatus: {}\nBody: {}",
+                package_file.display(),
+                StatusCode::CONFLICT,
+                body
+            );
+        }
     }
 
     info!("Packages successfully uploaded to Artifactory server");
@@ -375,7 +400,7 @@ async fn send_request_with_retry(
             .expect("Could not clone request. Does it have a streaming body?");
         let response = send_request(request, package_file).await?;
 
-        if response.status().is_success() {
+        if response.status().is_success() || response.status() == StatusCode::CONFLICT {
             return Ok(response);
         }
 
@@ -395,7 +420,7 @@ async fn send_request_with_retry(
                 return Err(miette::miette!("Authentication error: {}", err));
             }
             // Resource conflicts
-            StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY => {
+            StatusCode::UNPROCESSABLE_ENTITY => {
                 return Err(miette::miette!("Resource conflict: {}", err));
             }
             // Client errors
@@ -466,20 +491,16 @@ async fn send_request(
         .map_err(Redact::redact)
         .into_diagnostic()?;
 
-    response
-        .error_for_status_ref()
-        .map_err(Redact::redact)
-        .into_diagnostic()
-        .wrap_err("Server responded with error")?;
-
     progress_bar.finish();
-    info!(
-        "\nUpload complete for package file: {}",
-        package_file
-            .file_name()
-            .expect("no filename found")
-            .to_string_lossy()
-    );
+    if response.status().is_success() {
+        info!(
+            "\nUpload complete for package file: {}",
+            package_file
+                .file_name()
+                .expect("no filename found")
+                .to_string_lossy()
+        );
+    }
 
     Ok(response)
 }
@@ -494,7 +515,7 @@ mod test {
         authentication_storage::backends::memory::MemoryStorage,
     };
 
-    use crate::upload::opt::{ArtifactoryData, QuetzData};
+    use crate::upload::opt::{ArtifactoryData, QuetzData, SkipExisting};
     use crate::upload::test_utils::{start_test_server, test_package_path};
 
     async fn ok_with_api_key(
@@ -599,6 +620,118 @@ mod test {
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_conflict_skip_existing() {
+        let router = Router::new().fallback(conflict);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-key".to_string()),
+            false.into(),
+        )
+        .with_skip_existing(SkipExisting(true));
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[test]
+    fn test_quetz_opts_skip_existing() {
+        use crate::upload::opt::QuetzOpts;
+        use clap::Parser;
+
+        let opts_default = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+        ])
+        .unwrap();
+        assert!(!opts_default.skip_existing);
+
+        let opts_skip = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts_skip.skip_existing);
+
+        let opts_alias = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts_alias.skip_existing);
+
+        let opts_short = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+            "-s",
+        ])
+        .unwrap();
+        assert!(opts_short.skip_existing);
+
+        // Verify conflict with --force
+        let err_force_skip = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+            "--force",
+            "--skip-existing",
+        ])
+        .unwrap_err();
+        assert_eq!(
+            err_force_skip.kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
+
+        let err_force_alias = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+            "--force",
+            "--skip-if-exists",
+        ])
+        .unwrap_err();
+        assert_eq!(
+            err_force_alias.kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
+
+        let err_force_short = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "https://quetz.example.com",
+            "--channel",
+            "test-channel",
+            "--force",
+            "-s",
+        ])
+        .unwrap_err();
+        assert_eq!(
+            err_force_short.kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
     }
 
     #[tokio::test]
