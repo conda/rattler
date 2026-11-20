@@ -105,7 +105,9 @@ jobs:
           path: py-rattler/dist
 
   linux:
-    runs-on: ubuntu-latest
+    # Docker on ubuntu-26.04 denies `socketcall`, so the i686 manylinux container
+    # can't resolve hosts: https://github.com/actions/runner-images/issues/14790
+    runs-on: ubuntu-24.04
     name: Build ${{ matrix.target }}
     strategy:
       fail-fast: false
