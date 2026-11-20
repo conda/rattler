@@ -41,8 +41,6 @@ hex = { workspace = true }
 rattler_networking = { workspace = true, features = ["rattler_config"] }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
-rattler_config = { workspace = true, default-features = false }
-rattler_solve = { workspace = true }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 miette = { workspace = true, features = ["fancy"] }
 clap = { workspace = true, features = ["env"] }

@@ -14,7 +14,6 @@ anyhow = { workspace = true }
 hex = { workspace = true }
 libc = { workspace = true }
 thiserror = { workspace = true }
-memchr = { workspace = true }
 memmap2 = { workspace = true }
 rayon = { workspace = true }
 rattler = { workspace = true, default-features = false }
