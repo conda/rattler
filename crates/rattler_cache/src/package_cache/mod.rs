@@ -40,6 +40,8 @@ use crate::validation::{ValidationMode, validate_package_directory_lazily};
 
 mod cache_key;
 mod cache_lock;
+#[cfg(feature = "rattler_config")]
+mod config;
 mod reporter;
 
 #[derive(Clone)]
@@ -77,6 +79,7 @@ pub struct PackageCacheLayer {
     packages: Arc<DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>>,
     validation_mode: ValidationMode,
     filter: PackageCacheLayerFilter,
+    read_only: bool,
 }
 
 /// Controls which packages may be read from or written to a package-cache layer.
@@ -364,7 +367,15 @@ impl PackageCacheLayer {
             packages: Arc::new(DashMap::default()),
             validation_mode: ValidationMode::default(),
             filter: PackageCacheLayerFilter::default(),
+            read_only: false,
         }
+    }
+
+    /// Marks this layer as read-only: packages are read from it but never
+    /// written to it, even when the filesystem permits writing.
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     /// Sets the validation mode used by this layer.
@@ -410,11 +421,15 @@ impl PackageCacheLayer {
         self.filter.accepts(cache_key)
     }
 
-    /// Determine if the layer is read-only in the filesystem
+    /// Determine if the layer is read-only, either because it was marked
+    /// read-only with [`Self::with_read_only`] or because the filesystem does
+    /// not permit writing to it.
     pub fn is_readonly(&self) -> bool {
-        self.path
-            .metadata()
-            .is_ok_and(|m| m.permissions().readonly())
+        self.read_only
+            || self
+                .path
+                .metadata()
+                .is_ok_and(|m| m.permissions().readonly())
             || is_mounted_readonly(&self.path)
     }
 
@@ -2306,6 +2321,48 @@ mod test {
             .await
             .unwrap();
         assert!(metadata.path().starts_with(first.path()));
+    }
+
+    #[tokio::test]
+    async fn test_layer_marked_read_only_is_read_but_never_written() {
+        let shared = tempdir().unwrap();
+        let local = tempdir().unwrap();
+        let cached = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let missing = get_test_data_dir().join("clobber/clobber-pypy-0.1.0-h4616a5c_0.conda");
+        PackageCache::new(shared.path())
+            .get_or_fetch_from_path(&cached, None, None)
+            .await
+            .unwrap();
+
+        // `shared` is writable on disk; only the flag keeps writes out of it.
+        let cache = PackageCache::from_layers(
+            [
+                PackageCacheLayer::new(shared.path()).with_read_only(true),
+                PackageCacheLayer::new(local.path()),
+            ],
+            false,
+        );
+
+        let hit = cache
+            .get_or_fetch_from_path(&cached, None, None)
+            .await
+            .unwrap();
+        assert!(hit.path().starts_with(shared.path()));
+
+        let miss = cache
+            .get_or_fetch_from_path(&missing, None, None)
+            .await
+            .unwrap();
+        assert!(miss.path().starts_with(local.path()));
+        assert!(
+            !shared
+                .path()
+                .join(miss.path().file_name().unwrap())
+                .exists()
+        );
+        let _lock = cache.acquire_global_lock().await.unwrap();
+        assert!(local.path().join(".cache.lock").exists());
+        assert!(!shared.path().join(".cache.lock").exists());
     }
 
     #[tokio::test]

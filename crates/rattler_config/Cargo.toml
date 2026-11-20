@@ -32,6 +32,7 @@ rattler_solve = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_ignored = { workspace = true }
 serde_json = { workspace = true }
+serde_with = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true, optional = true }
 tracing = { workspace = true }
