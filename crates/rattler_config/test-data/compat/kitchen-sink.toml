@@ -52,3 +52,16 @@ timeout-seconds = 60
 [virtual-package-detectors.consent]
 "https://conda.anaconda.org/conda-forge" = "allow"
 "https://prefix.dev/internal" = "deny"
+
+[package-cache]
+validation = "fast"
+
+[[package-cache.layers]]
+path = "/cvmfs/software/conda-pkgs"
+read-only = true
+
+[[package-cache.layers]]
+path = "/shared/team/pkgs"
+include = ["pytorch", "cuda-toolkit >=12"]
+exclude = ["pytorch *cpu*"]
+validation = "full"

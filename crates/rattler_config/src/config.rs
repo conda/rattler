@@ -23,8 +23,8 @@ use url::Url;
 use crate::config::s3::S3OptionsMap;
 use crate::config::{
     build::BuildConfig, concurrency::ConcurrencyConfig, exclude_newer::ExcludeNewerConfig,
-    index::IndexConfig, proxy::ProxyConfig, repodata_config::RepodataConfig,
-    run_post_link_scripts::RunPostLinkScripts,
+    index::IndexConfig, package_cache::PackageCacheConfig, proxy::ProxyConfig,
+    repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
     virtual_package_detectors::VirtualPackageDetectorsConfig,
 };
 use crate::locations::{ConfigLayer, ConfigLocation};
@@ -34,6 +34,7 @@ pub mod channel_config;
 pub mod concurrency;
 pub mod exclude_newer;
 pub mod index;
+pub mod package_cache;
 pub mod proxy;
 pub mod repodata_config;
 pub mod run_post_link_scripts;
@@ -242,6 +243,10 @@ pub struct CommonConfig {
         skip_serializing_if = "VirtualPackageDetectorsConfig::is_default"
     )]
     pub virtual_package_detectors: VirtualPackageDetectorsConfig,
+
+    /// Additional package cache layers, e.g. read-only shared caches.
+    #[serde(default, skip_serializing_if = "PackageCacheConfig::is_default")]
+    pub package_cache: PackageCacheConfig,
     // Missing in rattler but should be available in pixi:
     //   experimental
     //   shell
@@ -277,6 +282,7 @@ impl Default for CommonConfig {
             allow_hard_links: None,
             allow_ref_links: None,
             virtual_package_detectors: VirtualPackageDetectorsConfig::default(),
+            package_cache: PackageCacheConfig::default(),
         }
     }
 }
@@ -362,6 +368,7 @@ impl Config for CommonConfig {
             virtual_package_detectors: self
                 .virtual_package_detectors
                 .merge_config(&other.virtual_package_detectors)?,
+            package_cache: self.package_cache.merge_config(&other.package_cache)?,
         })
     }
 
@@ -378,6 +385,7 @@ impl Config for CommonConfig {
         self.s3_options.validate()?;
         self.index_config.validate()?;
         self.virtual_package_detectors.validate()?;
+        self.package_cache.validate()?;
         Ok(())
     }
 
@@ -408,6 +416,7 @@ impl Config for CommonConfig {
             "virtual-package-detectors",
             self.virtual_package_detectors.keys(),
         ));
+        keys.extend(prefixed_keys("package-cache", self.package_cache.keys()));
         keys
     }
 }
