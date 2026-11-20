@@ -432,6 +432,63 @@ pub struct S3Opts {
     /// Replace files if it already exists.
     #[arg(long)]
     pub force: bool,
+
+    /// Skip upload if package already exists
+    #[arg(
+        short,
+        long,
+        alias = "skip-if-exists",
+        env = "S3_SKIP_EXISTING",
+        conflicts_with = "force"
+    )]
+    pub skip_existing: bool,
+}
+
+/// Data required for uploading packages to S3.
+#[cfg(feature = "s3")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct S3Data {
+    /// The channel URL in the S3 bucket to upload the package to.
+    pub channel: Url,
+
+    /// Publish an attestation sidecar alongside the package.
+    pub attestation: Option<PathBuf>,
+
+    /// Replace files if it already exists.
+    pub force: ForceOverwrite,
+
+    /// Skip upload if package already exists.
+    pub skip_existing: SkipExisting,
+}
+
+#[cfg(feature = "s3")]
+impl From<S3Opts> for S3Data {
+    fn from(value: S3Opts) -> Self {
+        Self {
+            channel: value.channel,
+            attestation: value.attestation,
+            force: value.force.into(),
+            skip_existing: value.skip_existing.into(),
+        }
+    }
+}
+
+#[cfg(feature = "s3")]
+impl S3Data {
+    /// Create a new instance of `S3Data`.
+    pub fn new(
+        channel: Url,
+        attestation: Option<PathBuf>,
+        force: ForceOverwrite,
+        skip_existing: SkipExisting,
+    ) -> Self {
+        Self {
+            channel,
+            attestation,
+            force,
+            skip_existing,
+        }
+    }
 }
 
 #[derive(Debug)]
