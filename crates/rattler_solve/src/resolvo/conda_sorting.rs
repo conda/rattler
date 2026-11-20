@@ -145,7 +145,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     /// 3. The version of the package
     /// 4. The channel rank for version ties, under version-first channel
     ///    priority
-    /// 5. The build number of the package
+    /// 5. The flag preferences
+    /// 6. The build number of the package
     fn simple_compare(&self, a: SolvableId, b: SolvableId) -> Ordering {
         let a_record = &self.solvable_record(a);
         let b_record = &self.solvable_record(b);
@@ -195,6 +196,16 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 Ordering::Equal => {}
                 ordering => return ordering,
             }
+        }
+
+        // Otherwise, select the variant that best matches the flag preferences
+        match self
+            .solver
+            .provider()
+            .compare_flag_preferences(a_record, b_record)
+        {
+            Ordering::Equal => {}
+            ordering => return ordering,
         }
 
         // Otherwise, select the variant with the highest build number first

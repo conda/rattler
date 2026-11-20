@@ -20,7 +20,8 @@ use std::sync::{
 
 use jiff::Timestamp;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, Matches, PackageName, RepoDataRecord, SolverResult,
+    Flag, GenericVirtualPackage, MatchSpec, Matches, PackageName, RepoDataRecord, SolverResult,
+    StringMatcher,
 };
 use url::Url;
 
@@ -667,6 +668,27 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// that sets it rather than silently solving without the restriction.
     pub excluded_candidates: HashMap<Url, Arc<str>>,
 
+    /// Soft preferences for or against package variants carrying certain
+    /// flags, e.g. prefer `debug` builds or avoid `cuda` builds.
+    ///
+    /// When two candidates of a package have the same version, the one that
+    /// better satisfies these preferences is tried first, ahead of the build
+    /// number. A higher version still wins regardless of its flags, and
+    /// candidates that do not satisfy a preference remain available as a
+    /// fallback. Use a `[flags=[...]]` match spec to require a flag instead.
+    ///
+    /// Earlier preferences take precedence over later ones.
+    ///
+    /// Like any other ordering criterion, a preference does not replace a
+    /// package from [`Self::locked_packages`]: a locked variant stays
+    /// favored until something else forces the solver to move away from it.
+    /// To apply a new preference to an existing environment, leave the
+    /// affected packages out of the locked packages.
+    ///
+    /// Only the `resolvo` backend supports this. Other backends reject a task
+    /// that sets it rather than silently solving without the preference.
+    pub flag_preferences: Vec<FlagPreference>,
+
     /// An optional token that can be used to cancel an in-flight solve.
     ///
     /// When the token's [`CancellationToken::cancel`] method is invoked from
@@ -696,6 +718,7 @@ impl<'r, T> SolverTask<'r, T> {
             strategy: SolveStrategy::default(),
             dependency_overrides: Vec::new(),
             excluded_candidates: HashMap::new(),
+            flag_preferences: Vec::new(),
             cancellation_token: None,
         }
     }
@@ -714,6 +737,37 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<ChannelRepoDat
 {
     fn from_iter<T: IntoIterator<Item = ChannelRepoData<'r, I>>>(iter: T) -> Self {
         Self::with_available_packages(iter.into_iter().collect())
+    }
+}
+
+/// A soft preference for or against package variants that carry a flag.
+///
+/// Flags are matched like the `[flags=[...]]` key of a match spec, so a
+/// preference can name a flag exactly (`debug`, `blas:mkl`) or use a glob
+/// (`cuda:*` for any `cuda` flag value).
+///
+/// See [`SolverTask::flag_preferences`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+pub enum FlagPreference {
+    /// Prefer variants that carry a flag matching the matcher.
+    Prefer(StringMatcher),
+
+    /// Prefer variants that carry no flag matching the matcher.
+    Avoid(StringMatcher),
+}
+
+impl FlagPreference {
+    /// Returns whether a variant with the given flags satisfies this
+    /// preference.
+    pub fn is_satisfied_by(&self, flags: &[Flag]) -> bool {
+        let any_match =
+            |matcher: &StringMatcher| flags.iter().any(|flag| matcher.matches(flag.as_str()));
+        match self {
+            FlagPreference::Prefer(matcher) => any_match(matcher),
+            FlagPreference::Avoid(matcher) => !any_match(matcher),
+        }
     }
 }
 
