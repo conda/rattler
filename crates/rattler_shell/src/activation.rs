@@ -760,6 +760,136 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
+        let has_deactivation = variables.conda_prefix.is_some();
+        let has_activation_scripts = !self.activation_scripts.is_empty();
+
+        if !has_deactivation && !has_activation_scripts {
+            return self.run_activation_fast_path(variables, environment);
+        }
+
+        self.run_activation_slow_path(variables, environment)
+    }
+
+    /// Fast path for activation when there are no activation scripts and no
+    /// previous prefix to deactivate. This computes the resulting environment diff
+    /// directly without spawning an external shell process.
+    fn run_activation_fast_path(
+        &self,
+        variables: ActivationVariables,
+        environment: Option<HashMap<&OsStr, &OsStr>>,
+    ) -> Result<HashMap<String, String>, ActivationError> {
+        let (before_env, current_env_ref) = match &environment {
+            Some(env) => {
+                let parsed: HashMap<String, String> = env
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.to_string_lossy().into_owned(),
+                            v.to_string_lossy().into_owned(),
+                        )
+                    })
+                    .collect();
+                (parsed, None)
+            }
+            None => (HashMap::new(), Some(&variables.current_env)),
+        };
+
+        let get_before = |key: &str| -> Option<&str> {
+            if let Some(val) = before_env.get(key) {
+                Some(val.as_str())
+            } else if let Some(curr) = current_env_ref {
+                curr.get(key).map(String::as_str)
+            } else {
+                None
+            }
+        };
+
+        let current_shlvl = get_before("CONDA_SHLVL")
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(0);
+        let new_shlvl = current_shlvl + 1;
+
+        let mut diff = HashMap::new();
+
+        diff.insert("CONDA_SHLVL".to_string(), new_shlvl.to_string());
+
+        if let Some(existing_prefix) = get_before("CONDA_PREFIX") {
+            let backup_key = format!("CONDA_ENV_SHLVL_{new_shlvl}_CONDA_PREFIX");
+            diff.insert(backup_key, existing_prefix.to_string());
+        }
+
+        diff.insert(
+            "CONDA_PREFIX".to_string(),
+            self.target_prefix.to_string_lossy().into_owned(),
+        );
+
+        for (key, value) in self
+            .env_vars
+            .iter()
+            .chain(self.post_activation_env_vars.iter())
+        {
+            if let Some(existing_val) = get_before(key) {
+                let backup_key = format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}");
+                diff.insert(backup_key, existing_val.to_string());
+            }
+            diff.insert(key.clone(), value.clone());
+        }
+
+        let mut path_dirs = self.paths.clone();
+        if let Some(ref extra_paths) = variables.path {
+            path_dirs.extend(extra_paths.clone());
+        }
+
+        let path_var = if self.platform.is_windows() {
+            "Path"
+        } else {
+            "PATH"
+        };
+
+        let existing_path = get_before(path_var)
+            .or_else(|| get_before("PATH"))
+            .or_else(|| get_before("Path"));
+
+        let path_sep = if self.platform.is_unix() { ":" } else { ";" };
+
+        let joined_new_paths = path_dirs
+            .iter()
+            .map(|p| p.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(path_sep);
+
+        let final_path = match variables.path_modification_behavior {
+            PathModificationBehavior::Replace => joined_new_paths,
+            PathModificationBehavior::Prepend => match existing_path {
+                Some(existing) if !existing.is_empty() => {
+                    format!("{joined_new_paths}{path_sep}{existing}")
+                }
+                _ => joined_new_paths,
+            },
+            PathModificationBehavior::Append => match existing_path {
+                Some(existing) if !existing.is_empty() => {
+                    format!("{existing}{path_sep}{joined_new_paths}")
+                }
+                _ => joined_new_paths,
+            },
+        };
+
+        diff.insert(path_var.to_string(), final_path);
+
+        // Filter out variables where before == after
+        if !before_env.is_empty() {
+            diff.retain(|key, value| before_env.get(key) != Some(value));
+        }
+
+        Ok(diff)
+    }
+
+    /// Slow path that actually invokes the shell process to evaluate activation.
+    pub fn run_activation_slow_path(
+        &self,
+        variables: ActivationVariables,
+        environment: Option<HashMap<&OsStr, &OsStr>>,
+    ) -> Result<HashMap<String, String>, ActivationError> {
         let activation_detection_script =
             self.activation_detection_script(variables, ENV_START_SEPARATOR)?;
 
@@ -1715,5 +1845,141 @@ mod tests {
                 script_contents
             );
         }
+    }
+
+    #[test]
+    fn test_run_activation_fast_path() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let target_prefix = environment_dir.path().to_path_buf();
+
+        let activator = Activator {
+            target_prefix: target_prefix.clone(),
+            shell_type: shell::Bash::default(),
+            paths: vec![target_prefix.join("bin")],
+            activation_scripts: vec![],
+            deactivation_scripts: vec![],
+            env_vars: IndexMap::from_iter([(
+                String::from("MY_STATIC_VAR"),
+                String::from("static_value"),
+            )]),
+            post_activation_env_vars: IndexMap::from_iter([(
+                String::from("POST_VAR"),
+                String::from("post_value"),
+            )]),
+            platform: Subdir::Linux64,
+        };
+
+        // Case 1: fresh activation without prior CONDA_PREFIX
+        let diff = activator
+            .run_activation(
+                ActivationVariables {
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: HashMap::from([(
+                        String::from("PATH"),
+                        String::from("/usr/bin:/bin"),
+                    )]),
+                    ..ActivationVariables::default()
+                },
+                Some(HashMap::from([(
+                    OsStr::new("PATH"),
+                    OsStr::new("/usr/bin:/bin"),
+                )])),
+            )
+            .unwrap();
+
+        assert_eq!(diff.get("CONDA_SHLVL").map(String::as_str), Some("1"));
+        assert_eq!(
+            diff.get("CONDA_PREFIX").map(String::as_str),
+            Some(target_prefix.to_str().unwrap())
+        );
+        assert_eq!(
+            diff.get("MY_STATIC_VAR").map(String::as_str),
+            Some("static_value")
+        );
+        assert_eq!(diff.get("POST_VAR").map(String::as_str), Some("post_value"));
+        let expected_path = format!(
+            "{}:/usr/bin:/bin",
+            target_prefix.join("bin").to_str().unwrap()
+        );
+        assert_eq!(
+            diff.get("PATH").map(String::as_str),
+            Some(expected_path.as_str())
+        );
+        // Ensure no backup key for previous prefix since there wasn't one
+        assert!(!diff.contains_key("CONDA_ENV_SHLVL_1_CONDA_PREFIX"));
+
+        // Case 2: nested activation with existing prefix and existing variable
+        let diff_nested = activator
+            .run_activation(
+                ActivationVariables {
+                    path_modification_behavior: PathModificationBehavior::Append,
+                    current_env: HashMap::from([
+                        (String::from("PATH"), String::from("/usr/bin:/bin")),
+                        (String::from("CONDA_PREFIX"), String::from("/old/env")),
+                        (String::from("CONDA_SHLVL"), String::from("1")),
+                        (String::from("MY_STATIC_VAR"), String::from("old_static")),
+                    ]),
+                    ..ActivationVariables::default()
+                },
+                Some(HashMap::from([
+                    (OsStr::new("PATH"), OsStr::new("/usr/bin:/bin")),
+                    (OsStr::new("CONDA_PREFIX"), OsStr::new("/old/env")),
+                    (OsStr::new("CONDA_SHLVL"), OsStr::new("1")),
+                    (OsStr::new("MY_STATIC_VAR"), OsStr::new("old_static")),
+                ])),
+            )
+            .unwrap();
+
+        assert_eq!(
+            diff_nested.get("CONDA_SHLVL").map(String::as_str),
+            Some("2")
+        );
+        assert_eq!(
+            diff_nested
+                .get("CONDA_ENV_SHLVL_2_CONDA_PREFIX")
+                .map(String::as_str),
+            Some("/old/env")
+        );
+        assert_eq!(
+            diff_nested
+                .get("CONDA_ENV_SHLVL_2_MY_STATIC_VAR")
+                .map(String::as_str),
+            Some("old_static")
+        );
+        assert_eq!(
+            diff_nested.get("MY_STATIC_VAR").map(String::as_str),
+            Some("static_value")
+        );
+        let expected_append_path = format!(
+            "/usr/bin:/bin:{}",
+            target_prefix.join("bin").to_str().unwrap()
+        );
+        assert_eq!(
+            diff_nested.get("PATH").map(String::as_str),
+            Some(expected_append_path.as_str())
+        );
+
+        // Case 3: PathModificationBehavior::Replace
+        let diff_replace = activator
+            .run_activation(
+                ActivationVariables {
+                    path_modification_behavior: PathModificationBehavior::Replace,
+                    current_env: HashMap::from([(
+                        String::from("PATH"),
+                        String::from("/usr/bin:/bin"),
+                    )]),
+                    ..ActivationVariables::default()
+                },
+                Some(HashMap::from([(
+                    OsStr::new("PATH"),
+                    OsStr::new("/usr/bin:/bin"),
+                )])),
+            )
+            .unwrap();
+
+        assert_eq!(
+            diff_replace.get("PATH").map(String::as_str),
+            Some(target_prefix.join("bin").to_str().unwrap())
+        );
     }
 }
