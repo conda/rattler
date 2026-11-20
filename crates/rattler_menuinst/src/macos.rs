@@ -488,6 +488,14 @@ impl MacOSMenu {
         Ok(())
     }
 
+    fn cf_bundle_identifier(&self) -> String {
+        resolve(
+            &self.item.cf_bundle_identifier,
+            &self.placeholders,
+            &format!("com.{}", slugify(&self.name)),
+        )
+    }
+
     fn write_plist_info(&self) -> Result<(), MenuInstError> {
         let name = self.name.clone();
         let slugname = slugify(&name);
@@ -509,11 +517,7 @@ impl MacOSMenu {
         // This one is _not_ part of the schema, so we just set it
         pl.insert("CFBundleExecutable".into(), Value::String(slugname.clone()));
 
-        let cf_bundle_identifier = resolve(
-            &self.item.cf_bundle_identifier,
-            &self.placeholders,
-            &format!("com.{slugname}"),
-        );
+        let cf_bundle_identifier = self.cf_bundle_identifier();
         pl.insert(
             "CFBundleIdentifier".into(),
             Value::String(cf_bundle_identifier.clone()),
@@ -694,22 +698,47 @@ impl MacOSMenu {
         plist::to_file_xml(&entitlements_file, &entitlements)?;
 
         // sign the .app directory with the entitlements
-        let _codesign = Command::new("/usr/bin/codesign")
-            .arg("--verbose")
-            .arg("--sign")
-            .arg("-")
-            .arg("--force")
-            .arg("--deep")
-            .arg("--options")
-            .arg("runtime")
-            .arg("--prefix")
-            .arg(format!("com.{}", slugify(&self.name)))
-            .arg("--entitlements")
-            .arg(&entitlements_file)
-            .arg(&self.directories.location)
-            .output()?;
+        codesign(
+            Command::new("/usr/bin/codesign")
+                .arg("--verbose")
+                .arg("--sign")
+                .arg("-")
+                .arg("--force")
+                .arg("--deep")
+                .arg("--options")
+                .arg("runtime")
+                .arg("--prefix")
+                .arg(format!("com.{}", slugify(&self.name)))
+                .arg("--entitlements")
+                .arg(&entitlements_file)
+                .arg(&self.directories.location),
+        )
+    }
 
-        Ok(())
+    /// Ad-hoc sign the bundle so its code identity is its own rather than the
+    /// shared launcher's.
+    fn sign(&self) -> Result<(), MenuInstError> {
+        let ad_hoc = |target: &Path| {
+            codesign(
+                Command::new("/usr/bin/codesign")
+                    .args(["--force", "--sign", "-"])
+                    .arg(target),
+            )
+        };
+        // Nested code must be signed before the bundle. `--deep` misses the
+        // nested app in `Contents/Resources`.
+        ad_hoc(Path::new(&format!(
+            "{}-script",
+            self.default_launcher_path().to_string_lossy()
+        )))?;
+        if self.needs_appkit_launcher() {
+            ad_hoc(&self.directories.nested_location)?;
+        }
+        if self.item.entitlements.is_some() {
+            self.sign_with_entitlements()
+        } else {
+            ad_hoc(&self.directories.location)
+        }
     }
 
     fn command(&self) -> Result<String, MenuInstError> {
@@ -760,12 +789,20 @@ impl MacOSMenu {
         Ok(lines.join("\n"))
     }
 
-    fn write_appkit_launcher(&self) -> Result<PathBuf, MenuInstError> {
+    fn write_appkit_launcher(&self, unique_uuid: bool) -> Result<PathBuf, MenuInstError> {
         #[cfg(target_arch = "aarch64")]
         let launcher_bytes = include_bytes!("../data/appkit_launcher_arm64");
         #[cfg(target_arch = "x86_64")]
         let launcher_bytes = include_bytes!("../data/appkit_launcher_x86_64");
 
+        let launcher_bytes = if unique_uuid {
+            with_unique_uuid(
+                launcher_bytes,
+                &format!("{}-appkit-launcher", self.cf_bundle_identifier()),
+            )
+        } else {
+            launcher_bytes.to_vec()
+        };
         let launcher_path = self.default_appkit_launcher_path();
         fs::write(&launcher_path, launcher_bytes)?;
         fs::set_permissions(&launcher_path, std::fs::Permissions::from_mode(0o755))?;
@@ -773,15 +810,20 @@ impl MacOSMenu {
         Ok(launcher_path)
     }
 
-    fn write_launcher(&self) -> Result<PathBuf, MenuInstError> {
+    fn write_launcher(&self, unique_uuid: bool) -> Result<PathBuf, MenuInstError> {
         #[cfg(target_arch = "aarch64")]
         let launcher_bytes = include_bytes!("../data/osx_launcher_arm64");
         #[cfg(target_arch = "x86_64")]
         let launcher_bytes = include_bytes!("../data/osx_launcher_x86_64");
 
+        let launcher_bytes = if unique_uuid {
+            with_unique_uuid(launcher_bytes, &self.cf_bundle_identifier())
+        } else {
+            launcher_bytes.to_vec()
+        };
         let launcher_path = self.default_launcher_path();
         let mut file = File::create(&launcher_path)?;
-        file.write_all(launcher_bytes)?;
+        file.write_all(&launcher_bytes)?;
         fs::set_permissions(&launcher_path, std::fs::Permissions::from_mode(0o755))?;
 
         Ok(launcher_path)
@@ -860,14 +902,83 @@ impl MacOSMenu {
         self.install_icon()?;
         self.write_pkg_info()?;
         self.write_plist_info()?;
-        self.write_appkit_launcher()?;
-        self.write_launcher()?;
+        self.write_appkit_launcher(true)?;
+        self.write_launcher(true)?;
         self.write_script(None)?;
         self.write_event_handler(None)?;
         self.register_launchservice(tracker)?;
-        self.sign_with_entitlements()?;
+        if let Err(e) = self.sign() {
+            // arm64 kills the unsigned UUID-rewritten launchers, so restore
+            // the pristine ones: shared identity, but they run.
+            tracing::warn!(
+                "Failed to sign {}, falling back to the shared launcher identity: {e}",
+                self.directories.location.display()
+            );
+            self.write_appkit_launcher(false)?;
+            self.write_launcher(false)?;
+        }
         Ok(())
     }
+}
+
+fn codesign(command: &mut Command) -> Result<(), MenuInstError> {
+    let output = command
+        .output()
+        .map_err(|e| MenuInstError::SigningFailed(format!("failed to run codesign: {e}")))?;
+    if !output.status.success() {
+        return Err(MenuInstError::SigningFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Copy a thin 64-bit Mach-O binary, replacing its `LC_UUID` with one derived
+/// from `seed`.
+///
+/// macOS Local Network privacy tells apps apart by the main executable's UUID,
+/// which is otherwise shared by every menuinst app. Seeding from the bundle
+/// identifier keeps it stable across reinstalls.
+fn with_unique_uuid(binary: &[u8], seed: &str) -> Vec<u8> {
+    let mut out = binary.to_vec();
+    let Some(range) = lc_uuid_range(binary) else {
+        tracing::warn!("Launcher has no LC_UUID load command; keeping its UUID");
+        return out;
+    };
+    let mut uuid: [u8; 16] = Sha256::digest(seed.as_bytes())[..16]
+        .try_into()
+        .expect("sha256 digest is at least 16 bytes");
+    uuid[6] = (uuid[6] & 0x0f) | 0x80; // version 8 (custom)
+    uuid[8] = (uuid[8] & 0x3f) | 0x80; // RFC 4122 variant
+    out[range].copy_from_slice(&uuid);
+    out
+}
+
+/// Byte range of the `LC_UUID` payload in a thin little-endian 64-bit Mach-O.
+fn lc_uuid_range(binary: &[u8]) -> Option<std::ops::Range<usize>> {
+    const MH_MAGIC_64: u32 = 0xfeed_facf;
+    const LC_UUID: u32 = 0x1b;
+    let read_u32 = |off: usize| -> Option<u32> {
+        Some(u32::from_le_bytes(
+            binary.get(off..off + 4)?.try_into().ok()?,
+        ))
+    };
+    if read_u32(0)? != MH_MAGIC_64 {
+        return None;
+    }
+    let mut offset = 32; // size of mach_header_64
+    let end = binary.len().min(offset + read_u32(20)? as usize); // + sizeofcmds
+    for _ in 0..read_u32(16)? {
+        let cmdsize = read_u32(offset + 4)? as usize;
+        if cmdsize < 8 || offset + cmdsize > end {
+            return None;
+        }
+        if read_u32(offset)? == LC_UUID {
+            return (cmdsize >= 24).then_some(offset + 8..offset + 24);
+        }
+        offset += cmdsize;
+    }
+    None
 }
 
 pub(crate) fn install_menu_item(
@@ -925,7 +1036,7 @@ fn resolve(
 
 #[cfg(test)]
 mod tests {
-    use crate::{MenuMode, schema::MenuInstSchema, test::test_data};
+    use crate::{MenuMode, render::PlaceholderString, schema::MenuInstSchema, test::test_data};
     use rattler_conda_types::menuinst::MacOsTracker;
     use std::{
         collections::HashMap,
@@ -942,6 +1053,25 @@ mod tests {
                 nested_location: tempfile::tempdir().unwrap().keep(),
             }
         }
+    }
+
+    fn uuid_of(b: &[u8]) -> &[u8] {
+        &b[super::lc_uuid_range(b).expect("no LC_UUID")]
+    }
+
+    #[test]
+    fn test_with_unique_uuid() {
+        let launcher = include_bytes!("../data/osx_launcher_arm64");
+        let a = super::with_unique_uuid(launcher, "com.example.a");
+        let b = super::with_unique_uuid(launcher, "com.example.b");
+        assert_eq!(a.len(), launcher.len());
+        assert_ne!(uuid_of(&a), uuid_of(launcher));
+        assert_ne!(uuid_of(&a), uuid_of(&b));
+        assert_eq!(a, super::with_unique_uuid(launcher, "com.example.a"));
+        assert_eq!(
+            super::with_unique_uuid(b"not a binary", "x"),
+            b"not a binary"
+        );
     }
 
     #[test]
@@ -1099,6 +1229,173 @@ mod tests {
             result,
             Err(crate::MenuInstError::InvalidMenuName(_))
         ));
+    }
+
+    /// Installed bundles verify, or fall back to the pristine launchers if
+    /// signing fails.
+    #[test]
+    fn test_macos_bundle_is_signed() {
+        let fake_prefix = FakePrefix::new(Path::new("spyder/menu.json"));
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            rattler_conda_types::Subdir::current().expect("host platform"),
+        );
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let macos = item.platforms.osx.unwrap();
+        let command = item.command.merge(macos.base);
+        let prebuilt: &[u8] = if cfg!(target_arch = "aarch64") {
+            include_bytes!("../data/osx_launcher_arm64")
+        } else {
+            include_bytes!("../data/osx_launcher_x86_64")
+        };
+
+        let entitlements = Some(vec!["com.apple.security.cs.allow-jit".to_string()]);
+        let event_handler = Some(PlaceholderString("true".into()));
+        for (entitlements, event_handler, sign_fails) in [
+            (None, None, false),
+            (None, event_handler.clone(), false),
+            (entitlements.clone(), None, false),
+            (entitlements, event_handler, false),
+            (None, None, true),
+        ] {
+            let mut specific = macos.specific.clone();
+            specific.entitlements = entitlements;
+            specific.event_handler = event_handler;
+
+            let tmp = TempDir::new().unwrap();
+            let location = tmp.path().join("Test.app");
+            let dirs = super::Directories {
+                nested_location: location.join("Contents/Resources/Test.app"),
+                location,
+            };
+            if sign_fails {
+                // codesign refuses bundles carrying Finder info (here: a color tag).
+                fs::create_dir_all(&dirs.location).unwrap();
+                let status = std::process::Command::new("/usr/bin/xattr")
+                    .args(["-wx", "com.apple.FinderInfo"])
+                    .arg(format!("00000000000000000C{}", "0".repeat(46)))
+                    .arg(&dirs.location)
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+            }
+            let menu = super::MacOSMenu::new_with_directories(
+                fake_prefix.prefix(),
+                specific,
+                command.clone(),
+                MenuMode::User,
+                &placeholders,
+                dirs.clone(),
+            )
+            .unwrap();
+            menu.install(&mut MacOsTracker::default()).unwrap();
+
+            let main = fs::read(menu.default_launcher_path()).unwrap();
+            if sign_fails {
+                assert_eq!(main, prebuilt);
+                continue;
+            }
+            assert_ne!(uuid_of(&main), uuid_of(prebuilt));
+            let mut bundles = vec![&dirs.location];
+            if menu.needs_appkit_launcher() {
+                bundles.push(&dirs.nested_location);
+            }
+            for bundle in bundles {
+                let status = std::process::Command::new("/usr/bin/codesign")
+                    .arg("--verify")
+                    .arg(bundle)
+                    .status()
+                    .unwrap();
+                assert!(
+                    status.success(),
+                    "{} is not validly signed",
+                    bundle.display()
+                );
+            }
+        }
+    }
+
+    /// Every shipped launcher, for both architectures, has an `LC_UUID` that
+    /// `with_unique_uuid` can find and rewrite.
+    #[test]
+    fn test_with_unique_uuid_all_launchers() {
+        for launcher in [
+            &include_bytes!("../data/osx_launcher_arm64")[..],
+            &include_bytes!("../data/osx_launcher_x86_64")[..],
+            &include_bytes!("../data/appkit_launcher_arm64")[..],
+            &include_bytes!("../data/appkit_launcher_x86_64")[..],
+        ] {
+            let rewritten = super::with_unique_uuid(launcher, "com.example.a");
+            assert_eq!(rewritten.len(), launcher.len());
+            assert_ne!(uuid_of(&rewritten), uuid_of(launcher));
+            let range = super::lc_uuid_range(launcher).unwrap();
+            assert_eq!(rewritten[..range.start], launcher[..range.start]);
+            assert_eq!(rewritten[range.end..], launcher[range.end..]);
+        }
+    }
+
+    /// Installed launchers run, also after a reinstall, and each app gets its
+    /// own stable UUID.
+    #[test]
+    fn test_installed_launcher_runs() {
+        let tmp = TempDir::new().unwrap();
+        let prefix = tmp.path().join("env");
+        fs::create_dir_all(&prefix).unwrap();
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            &prefix,
+            &prefix,
+            rattler_conda_types::Subdir::current().expect("host platform"),
+        );
+        let mut uuids = Vec::new();
+        for (name, event_handler) in [("App A", None), ("App B", Some("true"))] {
+            let marker = tmp.path().join(format!("{name}.ran"));
+            let schema: MenuInstSchema = serde_json::from_value(serde_json::json!({
+                "$schema": "https://schemas.conda.org/menuinst-1.schema.json",
+                "menu_name": "test",
+                "menu_items": [{
+                    "name": name,
+                    "description": "",
+                    "command": ["/usr/bin/touch", marker],
+                    "platforms": { "osx": { "event_handler": event_handler } }
+                }]
+            }))
+            .unwrap();
+            let item = schema.menu_items[0].clone();
+            let macos = item.platforms.osx.unwrap();
+            let location = tmp.path().join(format!("{name}.app"));
+            let dirs = super::Directories {
+                nested_location: location.join(format!("Contents/Resources/{name}.app")),
+                location,
+            };
+            let menu = super::MacOSMenu::new_with_directories(
+                &prefix,
+                macos.specific,
+                item.command.merge(macos.base),
+                MenuMode::User,
+                &placeholders,
+                dirs,
+            )
+            .unwrap();
+            let mut tracker = MacOsTracker::default();
+            menu.install(&mut tracker).unwrap();
+            let launcher = menu.default_launcher_path();
+            let installed = fs::read(&launcher).unwrap();
+            for _ in 0..2 {
+                let _ = fs::remove_file(&marker);
+                let status = std::process::Command::new(&launcher).status().unwrap();
+                assert!(status.success(), "{name}: launcher failed: {status}");
+                assert!(marker.exists(), "{name}: launcher did not run the script");
+                // Reinstalling over the executed bundle is deterministic.
+                menu.install(&mut tracker).unwrap();
+                assert_eq!(fs::read(&launcher).unwrap(), installed);
+            }
+            uuids.push(uuid_of(&installed).to_vec());
+            if menu.needs_appkit_launcher() {
+                super::remove_menu_item(&tracker).unwrap();
+            }
+        }
+        assert_ne!(uuids[0], uuids[1]);
     }
 
     /// Test macOS version parsing
