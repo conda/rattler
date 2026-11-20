@@ -49,14 +49,48 @@ struct LoginArgs {
     #[clap(long, help_heading = "Token / Basic Authentication")]
     conda_token: Option<String>,
 
+    /// Read the token from standard input instead of the command line, so it
+    /// does not end up in the shell history or the process list
+    #[clap(
+        long,
+        conflicts_with = "token",
+        group = "stdin_secret",
+        help_heading = "Token / Basic Authentication"
+    )]
+    token_stdin: bool,
+
+    /// Read the password from standard input instead of the command line
+    #[clap(
+        long,
+        conflicts_with = "password",
+        group = "stdin_secret",
+        help_heading = "Token / Basic Authentication"
+    )]
+    password_stdin: bool,
+
+    /// Read the anaconda.org / quetz token from standard input instead of the
+    /// command line
+    #[clap(
+        long,
+        conflicts_with = "conda_token",
+        group = "stdin_secret",
+        help_heading = "Token / Basic Authentication"
+    )]
+    conda_token_stdin: bool,
+
     // -- S3 --
     /// The S3 access key ID
-    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"], help_heading = "S3 Authentication")]
+    #[clap(long, requires = "s3_secret", conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin"], help_heading = "S3 Authentication")]
     s3_access_key_id: Option<String>,
 
     /// The S3 secret access key
-    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
+    #[clap(long, requires_all = ["s3_access_key_id"], group = "s3_secret", help_heading = "S3 Authentication")]
     s3_secret_access_key: Option<String>,
+
+    /// Read the S3 secret access key from standard input instead of the
+    /// command line
+    #[clap(long, requires_all = ["s3_access_key_id"], conflicts_with = "s3_secret_access_key", groups = ["stdin_secret", "s3_secret"], help_heading = "S3 Authentication")]
+    s3_secret_access_key_stdin: bool,
 
     /// The S3 session token
     #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
@@ -65,7 +99,7 @@ struct LoginArgs {
     // -- OAuth/OIDC --
     /// Log in interactively with OAuth/OIDC (browser or device code)
     #[cfg(feature = "oauth")]
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"], help_heading = "OAuth/OIDC Authentication")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin", "s3_access_key_id", "workload_identity"], help_heading = "OAuth/OIDC Authentication")]
     oauth: bool,
 
     /// OIDC issuer URL (defaults to <https://{host>})
@@ -109,7 +143,7 @@ struct LoginArgs {
     #[cfg(feature = "oauth")]
     #[clap(
         long,
-        conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"],
+        conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin", "s3_access_key_id", "workload_identity"],
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_audience: Option<String>,
@@ -117,7 +151,7 @@ struct LoginArgs {
     // -- Workload identity --
     /// Log in non-interactively by exchanging the CI provider's OIDC ID
     /// token (GitHub Actions, GitLab CI, ...) for an access token
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "Workload Identity (CI, non-interactive)")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin", "s3_access_key_id"], help_heading = "Workload Identity (CI, non-interactive)")]
     workload_identity: bool,
 
     /// Audience requested in the OIDC ID token (defaults to the host, or
@@ -153,6 +187,44 @@ struct LoginArgs {
     /// User-Agent header used for requests
     #[clap(long)]
     user_agent: Option<String>,
+}
+
+impl LoginArgs {
+    /// Reads the secret selected with one of the `--*-stdin` flags from
+    /// `reader` and stores it in the matching argument. Does nothing, and does
+    /// not read, when none of the flags is set.
+    ///
+    /// One trailing line break is removed, so that `echo "$TOKEN" | ...` works.
+    fn read_stdin_secret(
+        &mut self,
+        mut reader: impl std::io::Read,
+    ) -> Result<(), AuthenticationCLIError> {
+        let target = if self.token_stdin {
+            &mut self.token
+        } else if self.password_stdin {
+            &mut self.password
+        } else if self.conda_token_stdin {
+            &mut self.conda_token
+        } else if self.s3_secret_access_key_stdin {
+            &mut self.s3_secret_access_key
+        } else {
+            return Ok(());
+        };
+
+        let mut input = String::new();
+        reader
+            .read_to_string(&mut input)
+            .map_err(AuthenticationCLIError::StdinReadError)?;
+        let secret = input
+            .strip_suffix("\r\n")
+            .or_else(|| input.strip_suffix('\n'))
+            .unwrap_or(&input);
+        if secret.is_empty() {
+            return Err(AuthenticationCLIError::EmptyStdinSecret);
+        }
+        *target = Some(secret.to_string());
+        Ok(())
+    }
 }
 
 /// How the server exchanges the CI provider's OIDC ID token.
@@ -279,6 +351,14 @@ pub enum AuthenticationCLIError {
         "Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them"
     )]
     S3BadMethod,
+
+    /// Reading the secret from standard input failed
+    #[error("Failed to read the secret from standard input")]
+    StdinReadError(#[source] std::io::Error),
+
+    /// Standard input did not contain a secret
+    #[error("No secret was provided on standard input")]
+    EmptyStdinSecret,
 
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
@@ -491,10 +571,12 @@ async fn login(
 }
 
 async fn login_with_offline(
-    args: LoginArgs,
+    mut args: LoginArgs,
     storage: AuthenticationStorage,
     offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
+    args.read_stdin_secret(std::io::stdin().lock())?;
+
     if args.workload_identity {
         if offline {
             return Err(AuthenticationCLIError::Offline);
@@ -1430,8 +1512,12 @@ mod tests {
             username: None,
             password: None,
             conda_token: None,
+            token_stdin: false,
+            password_stdin: false,
+            conda_token_stdin: false,
             s3_access_key_id: None,
             s3_secret_access_key: None,
+            s3_secret_access_key_stdin: false,
             s3_session_token: None,
             #[cfg(feature = "oauth")]
             oauth: false,
@@ -1530,6 +1616,112 @@ mod tests {
                 subject: Some("user-123".to_string()),
                 audience: vec!["rattler".to_string(), "prefix".to_string()],
             })
+        );
+    }
+
+    fn stdin_args(configure: impl FnOnce(&mut LoginArgs)) -> LoginArgs {
+        let mut args = create_login_args("prefix.dev");
+        configure(&mut args);
+        args
+    }
+
+    #[test]
+    fn test_stdin_secret_goes_to_the_matching_argument() {
+        let mut args = stdin_args(|a| a.token_stdin = true);
+        args.read_stdin_secret(&b"tok_123\n"[..]).unwrap();
+        assert_eq!(args.token.as_deref(), Some("tok_123"));
+        assert!(args.password.is_none() && args.conda_token.is_none());
+
+        let mut args = stdin_args(|a| a.password_stdin = true);
+        args.read_stdin_secret(&b"hunter2\n"[..]).unwrap();
+        assert_eq!(args.password.as_deref(), Some("hunter2"));
+        assert!(args.token.is_none());
+
+        let mut args = stdin_args(|a| a.conda_token_stdin = true);
+        args.read_stdin_secret(&b"conda-tok\n"[..]).unwrap();
+        assert_eq!(args.conda_token.as_deref(), Some("conda-tok"));
+
+        let mut args = stdin_args(|a| a.s3_secret_access_key_stdin = true);
+        args.read_stdin_secret(&b"s3-secret\n"[..]).unwrap();
+        assert_eq!(args.s3_secret_access_key.as_deref(), Some("s3-secret"));
+    }
+
+    #[test]
+    fn test_stdin_secret_only_loses_one_trailing_line_break() {
+        let cases: &[(&[u8], &str)] = &[
+            (b"secret", "secret"),
+            (b"secret\n", "secret"),
+            (b"secret\r\n", "secret"),
+            (b"secret\n\n", "secret\n"),
+            (b" with spaces \n", " with spaces "),
+            (b"two\nlines", "two\nlines"),
+        ];
+        for &(input, expected) in cases {
+            let mut args = stdin_args(|a| a.token_stdin = true);
+            args.read_stdin_secret(input).unwrap();
+            assert_eq!(args.token.as_deref(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn test_empty_stdin_secret_is_an_error() {
+        for input in [b"" as &[u8], b"\n", b"\r\n"].iter().copied() {
+            let mut args = stdin_args(|a| a.token_stdin = true);
+            let error = args.read_stdin_secret(input).unwrap_err();
+            assert!(
+                matches!(error, AuthenticationCLIError::EmptyStdinSecret),
+                "input {input:?}: {error:?}"
+            );
+            assert!(args.token.is_none());
+        }
+    }
+
+    #[test]
+    fn test_stdin_is_not_read_without_a_stdin_flag() {
+        struct NoRead;
+        impl std::io::Read for NoRead {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                panic!("standard input must not be read");
+            }
+        }
+        let mut args = stdin_args(|a| a.token = Some("given".to_string()));
+        args.read_stdin_secret(NoRead).unwrap();
+        assert_eq!(args.token.as_deref(), Some("given"));
+    }
+
+    #[test]
+    fn test_stdin_flags_conflict_with_the_command_line_secret() {
+        for conflicting in [
+            vec!["--token-stdin", "--token", "x"],
+            vec!["--password-stdin", "--password", "x"],
+            vec!["--conda-token-stdin", "--conda-token", "x"],
+            vec!["--token-stdin", "--password-stdin"],
+            vec!["--workload-identity", "--token-stdin"],
+            vec!["--oauth", "--password-stdin"],
+        ] {
+            let mut cmd = vec!["auth", "login", "prefix.dev"];
+            cmd.extend(conflicting);
+            assert!(
+                Args::try_parse_from(&cmd).is_err(),
+                "{cmd:?} should conflict"
+            );
+        }
+        assert!(Args::try_parse_from(["auth", "login", "prefix.dev", "--token-stdin"]).is_ok());
+        assert!(
+            Args::try_parse_from([
+                "auth",
+                "login",
+                "s3://bucket",
+                "--s3-access-key-id",
+                "id",
+                "--s3-secret-access-key-stdin",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Args::try_parse_from(["auth", "login", "s3://bucket", "--s3-access-key-id", "id"])
+                .is_err(),
+            "an S3 access key ID still needs a secret"
         );
     }
 
