@@ -1378,6 +1378,50 @@ mod tests {
         assert!(!activation_env.contains_key("UNCHANGED"));
     }
 
+    /// On macOS, SIP strips `DYLD_*` variables from the environment of
+    /// protected binaries such as `/usr/bin/env`, so the environment dump
+    /// must not go through one.
+    #[cfg(unix)]
+    fn test_run_activation_preserves_dyld_env_var(shell: ShellEnum) {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let mut activator = Activator::from_path(
+            environment_dir.path(),
+            shell,
+            Subdir::current().expect("host platform"),
+        )
+        .unwrap();
+        activator.post_activation_env_vars =
+            IndexMap::from_iter([(String::from("DYLD_LIBRARY_PATH"), String::from("/some/lib"))]);
+
+        let activation_env = activator
+            .run_activation(ActivationVariables::default(), None)
+            .unwrap();
+
+        assert_eq!(
+            activation_env.get("DYLD_LIBRARY_PATH").map(String::as_str),
+            Some("/some/lib")
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_preserves_dyld_env_var_bash() {
+        test_run_activation_preserves_dyld_env_var(crate::shell::Bash::default().into());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_run_activation_preserves_dyld_env_var_zsh() {
+        test_run_activation_preserves_dyld_env_var(crate::shell::Zsh.into());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    #[ignore]
+    fn test_run_activation_preserves_dyld_env_var_fish() {
+        test_run_activation_preserves_dyld_env_var(crate::shell::Fish.into());
+    }
+
     #[test]
     #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {
