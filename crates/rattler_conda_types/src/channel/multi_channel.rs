@@ -461,6 +461,17 @@ mod tests {
             .unwrap();
         assert_eq!(resolved.channels().len(), 1);
         assert_eq!(resolved.channels()[0].name(), "conda-forge");
+
+        // A channel name with a `/` resolves against the channel alias.
+        let resolved = "defaults=pkgs/main"
+            .parse::<ChannelSpecifier>()
+            .unwrap()
+            .resolve(&MultiChannels::new(), &config())
+            .unwrap();
+        assert_eq!(
+            resolved.channels()[0].base_url.as_str(),
+            "https://conda.anaconda.org/pkgs/main/"
+        );
     }
 
     #[test]
