@@ -2,7 +2,9 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use rattler_conda_types::{Channel, ChannelUrl, PackageName, RepoDataRecord, Subdir};
+use rattler_conda_types::{
+    Channel, ChannelOrMultiChannel, ChannelUrl, MultiChannel, PackageName, RepoDataRecord, Subdir,
+};
 use thiserror::Error;
 
 use super::{
@@ -186,6 +188,34 @@ impl MultiSource {
     }
 }
 
+impl TryFrom<MultiChannel> for MultiSource {
+    type Error = MultiSourceError;
+
+    fn try_from(multi_channel: MultiChannel) -> Result<Self, Self::Error> {
+        MultiSource::new(
+            multi_channel.name,
+            multi_channel
+                .channels
+                .into_iter()
+                .map(Source::Channel)
+                .collect(),
+        )
+    }
+}
+
+impl TryFrom<ChannelOrMultiChannel> for Source {
+    type Error = MultiSourceError;
+
+    fn try_from(channel: ChannelOrMultiChannel) -> Result<Self, Self::Error> {
+        match channel {
+            ChannelOrMultiChannel::Channel(channel) => Ok(Source::Channel(channel)),
+            ChannelOrMultiChannel::MultiChannel(multi_channel) => {
+                MultiSource::try_from(multi_channel).map(Source::Multi)
+            }
+        }
+    }
+}
+
 /// An error that can occur when constructing a [`MultiSource`].
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum MultiSourceError {
@@ -335,5 +365,35 @@ impl SubdirClient for CustomSourceClient {
 
     fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.source.package_names(self.platform)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use rattler_conda_types::{ChannelConfig, ChannelSpecifier, MultiChannels};
+
+    use super::*;
+
+    #[test]
+    fn source_from_channel_or_multi_channel() {
+        let config = ChannelConfig::default_with_root_dir(PathBuf::from("/"));
+        let resolve = |s: &str| {
+            Source::try_from(
+                s.parse::<ChannelSpecifier>()
+                    .unwrap()
+                    .resolve(&MultiChannels::new(), &config)
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+
+        assert!(matches!(resolve("conda-forge"), Source::Channel(_)));
+        let Source::Multi(multi_source) = resolve("defaults=pkgs/main,pkgs/r") else {
+            panic!("expected a multichannel");
+        };
+        assert_eq!(multi_source.name(), "defaults");
+        assert_eq!(multi_source.sources().len(), 2);
     }
 }

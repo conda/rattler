@@ -633,6 +633,100 @@ mod tests {
     }
 
     #[test]
+    fn test_multichannels() {
+        let toml = r#"
+            default-channels = ["conda-forge", "defaults"]
+
+            [multichannels]
+            defaults = ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"]
+        "#;
+        let (config, unused) = TestConfig::from_toml_str(toml).unwrap();
+        assert!(unused.is_empty());
+        config.validate().unwrap();
+        assert_eq!(config.multichannels["defaults"].len(), 2);
+
+        let resolved: Vec<_> = config
+            .default_channels
+            .clone()
+            .unwrap()
+            .into_iter()
+            .map(|channel| config.resolve_channel(channel).unwrap())
+            .collect();
+        assert_eq!(resolved[0].multi_channel_name(), None);
+        assert_eq!(resolved[1].multi_channel_name(), Some("defaults"));
+        assert_eq!(
+            resolved[1].channels()[1].base_url.as_str(),
+            "https://repo.anaconda.com/pkgs/r/"
+        );
+
+        // Serializing keeps the table.
+        let (roundtrip, _) = TestConfig::from_toml_str(&config.to_toml().unwrap()).unwrap();
+        assert_eq!(roundtrip.multichannels, config.multichannels);
+    }
+
+    #[test]
+    fn test_multichannels_merge_replaces_per_name() {
+        let (base, _) = TestConfig::from_toml_str(
+            r#"
+            [multichannels]
+            defaults = ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"]
+            corp = ["https://corp.example.com/main"]
+            "#,
+        )
+        .unwrap();
+        let (other, _) = TestConfig::from_toml_str(
+            r#"
+            [multichannels]
+            defaults = ["https://mirror.example.com/pkgs/main"]
+            "#,
+        )
+        .unwrap();
+        let merged = base.merge_config(&other).unwrap();
+        assert_eq!(
+            merged.multichannels["defaults"],
+            vec!["https://mirror.example.com/pkgs/main".parse().unwrap()]
+        );
+        assert_eq!(merged.multichannels["corp"].len(), 1);
+    }
+
+    #[test]
+    fn test_multichannels_validation() {
+        for toml in [
+            "[multichannels]\nempty = []",
+            "[multichannels]\ndefaults = [\"conda-forge\", \"conda-forge\"]",
+            "[multichannels]\ncorp = [\"defaults\"]\ndefaults = [\"conda-forge\"]",
+            "[multichannels]\n\"a/b\" = [\"conda-forge\"]",
+        ] {
+            let (config, _) = TestConfig::from_toml_str(toml).unwrap();
+            assert!(
+                matches!(
+                    config.validate(),
+                    Err(ValidationError::InvalidValue(ref key, _)) if key.starts_with("multichannels.")
+                ),
+                "{toml}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_edit_multichannels() {
+        let mut config = TestConfig::default();
+        config
+            .set(
+                "multichannels.defaults",
+                Some(
+                    r#"["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"]"#
+                        .to_string(),
+                ),
+            )
+            .unwrap();
+        assert_eq!(config.multichannels["defaults"].len(), 2);
+
+        config.set("multichannels.defaults", None).unwrap();
+        assert!(config.multichannels.is_empty());
+    }
+
+    #[test]
     fn test_edit_exclude_newer() {
         use crate::config::exclude_newer::{ExcludeNewerConfig, ExcludeNewerExemption};
 
@@ -1291,6 +1385,7 @@ mod tests {
         assert!(keys.contains(&"tls-no-verify".to_string()));
         assert!(keys.contains(&"tls-root-certs".to_string()));
         assert!(keys.contains(&"mirrors".to_string()));
+        assert!(keys.contains(&"multichannels".to_string()));
     }
 
     #[test]

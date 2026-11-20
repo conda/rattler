@@ -1,6 +1,6 @@
 //! Command line options shared by every command that resolves an environment.
 
-use std::{collections::HashSet, fmt, str::FromStr, time::Duration};
+use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
@@ -9,13 +9,13 @@ use rattler_conda_types::{
     RepoDataRecord, SolverResult, Subdir, Version, package::BuildString,
 };
 use rattler_config::{ConfigBase, NoExtension};
-use rattler_repodata_gateway::{MultiSource, RepoData, Source};
+use rattler_repodata_gateway::{RepoData, Source};
 use rattler_solve::{
     ChannelRepoData, IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo,
 };
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 
-use crate::commands::gateway::resolve_channels;
+use crate::commands::gateway::resolve_channels_or_multi_channels;
 use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 
 /// Options that configure how an environment is solved.
@@ -28,11 +28,12 @@ pub struct SolverArgs {
     ///
     /// A value of the form `NAME=CHANNEL,CHANNEL,...` searches the
     /// multichannel NAME instead, whose channels share a single channel
-    /// priority tier.
+    /// priority tier. The name of a multichannel from the `multichannels`
+    /// table of the configuration, e.g. `defaults`, does the same.
     ///
     /// Example: `-c conda-forge -c defaults=https://repo.anaconda.com/pkgs/main,https://repo.anaconda.com/pkgs/r`
     #[clap(short, long = "channel")]
-    channels: Vec<ChannelArg>,
+    channels: Vec<String>,
 
     /// Additional constraint that the solution must satisfy.
     ///
@@ -110,54 +111,6 @@ pub struct SolverArgs {
     /// Policy for selecting package timestamps when using `--exclude-newer`.
     #[clap(long, default_value = "require-timestamp")]
     timestamp_policy: TimestampPolicy,
-}
-
-/// A `--channel` value: a single channel, or a multichannel given as
-/// `NAME=CHANNEL,CHANNEL,...`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ChannelArg {
-    /// A channel name, URL or path.
-    Channel(String),
-    /// A multichannel called `name` that consists of `channels`.
-    MultiChannel { name: String, channels: Vec<String> },
-}
-
-#[derive(Debug)]
-pub struct ParseMultiChannelArgError;
-
-impl fmt::Display for ParseMultiChannelArgError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "expected NAME=CHANNEL,CHANNEL,... (for example, defaults=pkgs/main,pkgs/r)"
-        )
-    }
-}
-
-impl std::error::Error for ParseMultiChannelArgError {}
-
-impl FromStr for ChannelArg {
-    type Err = ParseMultiChannelArgError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Only a plain name before the `=` makes a multichannel: URLs and
-        // Windows paths contain a `:` and other paths a separator, so a
-        // channel that happens to contain a `=` stays a channel.
-        let Some((name, channels)) = s
-            .split_once('=')
-            .filter(|(name, _)| !name.is_empty() && !name.contains(['/', '\\', ':']))
-        else {
-            return Ok(Self::Channel(s.to_string()));
-        };
-        let channels: Vec<String> = channels.split(',').map(str::to_string).collect();
-        if channels.iter().any(String::is_empty) {
-            return Err(ParseMultiChannelArgError);
-        }
-        Ok(Self::MultiChannel {
-            name: name.to_string(),
-            channels,
-        })
-    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -272,35 +225,21 @@ impl SolverArgs {
         config: &ConfigBase<NoExtension>,
         channel_config: &ChannelConfig,
     ) -> miette::Result<Vec<Source>> {
-        if self.channels.is_empty() {
-            return Ok(resolve_channels(None, config, channel_config)?
-                .into_iter()
-                .map(Source::from)
-                .collect());
-        }
+        let cli_channels = (!self.channels.is_empty()).then_some(self.channels.as_slice());
+        let channels = resolve_channels_or_multi_channels(cli_channels, config, channel_config)?;
 
         let mut names = HashSet::new();
-        self.channels
-            .iter()
-            .map(|channel| match channel {
-                ChannelArg::Channel(channel) => Channel::from_str(channel, channel_config)
-                    .map(Source::from)
-                    .into_diagnostic(),
-                ChannelArg::MultiChannel { name, channels } => {
-                    if !names.insert(name.as_str()) {
-                        return Err(miette::miette!(
-                            "multichannel '{name}' is given more than once"
-                        ));
-                    }
-                    let channels = channels
-                        .iter()
-                        .map(|channel| Channel::from_str(channel, channel_config).map(Source::from))
-                        .collect::<Result<_, _>>()
-                        .into_diagnostic()?;
-                    MultiSource::new(name.as_str(), channels)
-                        .map(Source::from)
-                        .into_diagnostic()
+        channels
+            .into_iter()
+            .map(|channel| {
+                if let Some(name) = channel.multi_channel_name()
+                    && !names.insert(name.to_string())
+                {
+                    return Err(miette::miette!(
+                        "multichannel '{name}' is given more than once"
+                    ));
                 }
+                Source::try_from(channel).into_diagnostic()
             })
             .collect()
     }
