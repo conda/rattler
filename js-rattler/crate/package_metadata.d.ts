@@ -128,7 +128,9 @@ export declare type PathsJson = {
 /**
  * The contents of the `info/run_exports.json` file of a conda package. Each
  * field holds match specs that are added to the packages that depend on this
- * package at build time.
+ * package at build time. `flags_from_build` and `flags_from_host` hold flags
+ * that are added to the packages that have this package as a direct build or
+ * host dependency respectively.
  *
  * @public
  */
@@ -138,4 +140,6 @@ export declare type RunExportsJson = {
     noarch?: string[];
     weak_constrains?: string[];
     strong_constrains?: string[];
+    flags_from_build?: string[];
+    flags_from_host?: string[];
 };
