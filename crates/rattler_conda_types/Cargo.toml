@@ -27,7 +27,6 @@ hex = { workspace = true }
 itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
-nom-language = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
 rattler_digest = { workspace = true, default-features = false, features = [
   "serde",
@@ -36,7 +35,6 @@ rattler_conda_version = { workspace = true }
 rattler_macros = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
 fancy-regex = { workspace = true }
-regex = { workspace = true }
 simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }

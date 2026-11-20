@@ -3502,28 +3502,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "json-patch"
-version = "4.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7421438de105a0827e44fadd05377727847d717c80ce29a229f85fd04c427b72"
-dependencies = [
- "jsonptr",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "jsonptr"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5a3cc660ba5d72bce0b3bb295bf20847ccbb40fd423f3f05b61273672e561fe"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "keyring-core"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3986,15 +3964,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "nom-language"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2de2bc5b451bfedaef92c90b8939a8fff5770bdcc1fafd6239d086aab8fa6b29"
-dependencies = [
- "nom 8.0.0",
 ]
 
 [[package]]
@@ -5161,7 +5130,6 @@ dependencies = [
  "console",
  "dialoguer",
  "digest 0.11.3",
- "dirs",
  "filetime",
  "fs-err",
  "futures",
@@ -5181,7 +5149,6 @@ dependencies = [
  "openidconnect",
  "parking_lot 0.13.0",
  "path_resolver",
- "rand 0.10.4",
  "rattler_cache",
  "rattler_conda_types",
  "rattler_config",
@@ -5206,7 +5173,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tools",
- "tower",
  "tower-http 0.7.1",
  "tracing",
  "tracing-test",
@@ -5298,7 +5264,6 @@ dependencies = [
 name = "rattler_cache"
 version = "0.12.4"
 dependencies = [
- "ahash",
  "anyhow",
  "assert_matches",
  "astral-reqwest-middleware",
@@ -5306,7 +5271,6 @@ dependencies = [
  "axum",
  "bytes",
  "dashmap",
- "digest 0.11.3",
  "dirs",
  "fs-err",
  "fs4",
@@ -5355,7 +5319,6 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "serde_yaml",
- "tempfile",
  "thiserror 2.0.21",
  "url",
 ]
@@ -5383,7 +5346,6 @@ dependencies = [
  "lazy-regex",
  "memmap2",
  "nom 8.0.0",
- "nom-language",
  "pathdiff",
  "proptest",
  "purl",
@@ -5395,7 +5357,6 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "rayon",
- "regex",
  "rmp-serde",
  "rstest",
  "serde",
@@ -5582,7 +5543,6 @@ dependencies = [
  "rattler_solve",
  "rstest",
  "serde",
- "serde-untagged",
  "serde-value",
  "serde_json",
  "serde_repr",
@@ -5802,7 +5762,6 @@ dependencies = [
  "itertools 0.15.0",
  "jiff",
  "js-sys",
- "json-patch",
  "libc",
  "memmap2",
  "parking_lot 0.13.0",
@@ -5824,7 +5783,6 @@ dependencies = [
  "send_wrapper",
  "serde",
  "serde_json",
- "serde_with",
  "simple_spawn_blocking",
  "strum",
  "superslice",
@@ -5871,7 +5829,6 @@ version = "0.2.38"
 dependencies = [
  "birdcage",
  "clap",
- "fs-err",
  "libtest-mimic",
  "tokio",
 ]
@@ -5970,13 +5927,11 @@ dependencies = [
  "miette",
  "opendal",
  "rattler_conda_types",
- "rattler_config",
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_redaction",
  "rattler_s3",
- "rattler_solve",
  "reqwest",
  "serde",
  "serde_json",
@@ -6001,7 +5956,6 @@ dependencies = [
  "fuser",
  "hex",
  "libc",
- "memchr",
  "memmap2",
  "nfs3_server",
  "nfs3_types",
@@ -6049,7 +6003,6 @@ dependencies = [
  "rattler_repodata_gateway",
  "rattler_shell",
  "rattler_solve",
- "rstest",
  "serde",
  "serde_json",
  "tempfile",

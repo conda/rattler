@@ -14,13 +14,10 @@ default = ["rustls"]
 rustls = ["reqwest/rustls", "reqwest-middleware/rustls", "rattler_networking/rustls", "rattler_package_streaming/rustls"]
 native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
 
-[dependencies]
-
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
-ahash = { workspace = true }
 anyhow = { workspace = true }
 dashmap = { workspace = true }
 dirs = { workspace = true }
@@ -41,7 +38,6 @@ tracing = { workspace = true }
 url = { workspace = true }
 thiserror = { workspace = true }
 reqwest-middleware = { workspace = true }
-digest = { workspace = true }
 hex = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }

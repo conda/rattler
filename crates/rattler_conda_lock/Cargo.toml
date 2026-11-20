@@ -40,4 +40,3 @@ rattler_conda_lock = { path = ".", features = ["miette"] }
 rattler_digest = { workspace = true, default-features = false }
 rstest = { workspace = true }
 serde_yaml = { workspace = true }
-tempfile = { workspace = true }

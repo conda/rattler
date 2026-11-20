@@ -34,7 +34,6 @@ jiff = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
 hex = { workspace = true }
-dirs = { workspace = true }
 filetime = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
@@ -79,7 +78,6 @@ serde_json.workspace = true
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-rand = { workspace = true }
 rstest = { workspace = true }
 tracing-test = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
@@ -88,7 +86,6 @@ tools = { path="../tools" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 axum = { workspace = true, features = ["json", "form"] }
 tower-http = { workspace = true, features = ["fs"] }
-tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
 mockito = "=1.7.2"
 tempfile = { workspace = true }
