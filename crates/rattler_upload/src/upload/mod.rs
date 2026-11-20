@@ -321,6 +321,21 @@ pub async fn upload_package_to_cloudsmith(
             miette::miette!("Package file {} has no filename", package_file.display())
         })?;
 
+        if cloudsmith_data.skip_existing.is_enabled() {
+            match client.package_exists(filename).await {
+                Ok(true) => {
+                    info!("Skip existing package: {filename}");
+                    continue;
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    warn!(
+                        "Failed to check if package exists on Cloudsmith ({filename}): {e}. Proceeding with upload."
+                    );
+                }
+            }
+        }
+
         let md5 = package.md5_hex().into_diagnostic()?;
         let file_size = package.file_size().into_diagnostic()?;
         let is_multipart = file_size >= cloudsmith::CHUNK_SIZE as u64;
@@ -348,12 +363,17 @@ pub async fn upload_package_to_cloudsmith(
             .create_package(
                 &upload_response.identifier,
                 cloudsmith_data.force.is_enabled(),
+                cloudsmith_data.skip_existing,
             )
             .await?;
-        info!(
-            "Package created: slug_perm={}, slug={}",
-            pkg_response.slug_perm, pkg_response.slug
-        );
+        if let Some(pkg_response) = pkg_response {
+            info!(
+                "Package created: slug_perm={}, slug={}",
+                pkg_response.slug_perm, pkg_response.slug
+            );
+        } else {
+            info!("Skip existing package: {filename}");
+        }
     }
 
     info!("Packages successfully uploaded to Cloudsmith");
@@ -883,6 +903,242 @@ mod test {
         ])
         .unwrap();
         assert!(!opts_default.force);
+    }
+
+    #[test]
+    fn test_cloudsmith_opts_skip_existing() {
+        use crate::upload::opt::{CloudsmithData, CloudsmithOpts};
+        use clap::Parser;
+
+        let opts_default = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+        ])
+        .unwrap();
+        assert!(!opts_default.skip_existing);
+        let data_default: CloudsmithData = opts_default.into();
+        assert!(!data_default.skip_existing.is_enabled());
+
+        let opts_skip = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts_skip.skip_existing);
+        let data_skip: CloudsmithData = opts_skip.into();
+        assert!(data_skip.skip_existing.is_enabled());
+
+        let opts_skip_alias = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts_skip_alias.skip_existing);
+
+        let opts_skip_short = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "-s",
+        ])
+        .unwrap();
+        assert!(opts_skip_short.skip_existing);
+
+        // Verify --force and --skip-existing conflict
+        let opts_conflict = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "--force",
+            "--skip-existing",
+        ]);
+        assert!(opts_conflict.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_upload_skip_existing() {
+        use crate::upload::opt::SkipExisting;
+        use axum::routing::post;
+        use std::net::SocketAddr;
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url: url::Url = format!("http://{}:{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let upload_handler = {
+            let base_url = base_url.clone();
+            move |headers: axum::http::HeaderMap| {
+                let base_url = base_url.clone();
+                async move {
+                    assert!(headers.get("X-Api-Key").is_some());
+                    let upload_url = base_url.join("s3-upload").unwrap();
+                    (
+                        axum::http::StatusCode::OK,
+                        [("content-type", "application/json")],
+                        serde_json::json!({
+                            "identifier": "test-file-id",
+                            "upload_url": upload_url.to_string(),
+                            "upload_fields": {"key": "value"}
+                        })
+                        .to_string(),
+                    )
+                }
+            }
+        };
+
+        let router = Router::new()
+            .route("/files/{owner}/{repo}/", post(upload_handler))
+            .route("/s3-upload", post(|| async { StatusCode::OK }))
+            .route(
+                "/packages/{owner}/{repo}/upload/conda/",
+                post(|| async {
+                    (
+                        StatusCode::CONFLICT,
+                        [("content-type", "application/json")],
+                        serde_json::json!({
+                            "error": "Package already exists"
+                        })
+                        .to_string(),
+                    )
+                }),
+            );
+
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        let storage = AuthenticationStorage::empty();
+
+        // 1. With skip_existing = false: should fail with PackageCreationFailed 409
+        let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            Some("test-api-key".to_string()),
+            Some(base_url.clone()),
+        )
+        .with_skip_existing(SkipExisting(false));
+
+        let result = super::upload_package_to_cloudsmith(
+            &storage,
+            &vec![test_package_path()],
+            cloudsmith_data,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            super::cloudsmith::CloudsmithError::PackageCreationFailed { status: 409, .. }
+        ));
+
+        // 2. With skip_existing = true: should succeed (skip)
+        let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            Some("test-api-key".to_string()),
+            Some(base_url),
+        )
+        .with_skip_existing(SkipExisting(true));
+
+        let result = super::upload_package_to_cloudsmith(
+            &storage,
+            &vec![test_package_path()],
+            cloudsmith_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_upload_skip_existing_pre_check() {
+        use crate::upload::opt::SkipExisting;
+        use axum::routing::{get, post};
+        use std::net::SocketAddr;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let upload_called = Arc::new(AtomicBool::new(false));
+        let upload_called_clone = upload_called.clone();
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url: url::Url = format!("http://{}:{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let router = Router::new()
+            .route(
+                "/packages/{owner}/{repo}/",
+                get(|| async {
+                    (
+                        StatusCode::OK,
+                        [("content-type", "application/json")],
+                        serde_json::json!([
+                            {
+                                "filename": "empty-0.1.0-h4616a5c_0.conda",
+                                "status": 4,
+                                "status_str": "Completed",
+                                "is_sync_completed": true
+                            }
+                        ])
+                        .to_string(),
+                    )
+                }),
+            )
+            .route(
+                "/files/{owner}/{repo}/",
+                post(move || {
+                    let upload_called = upload_called_clone.clone();
+                    async move {
+                        upload_called.store(true, Ordering::SeqCst);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
+                }),
+            );
+
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        let storage = AuthenticationStorage::empty();
+        let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            Some("test-api-key".to_string()),
+            Some(base_url),
+        )
+        .with_skip_existing(SkipExisting(true));
+
+        let result = super::upload_package_to_cloudsmith(
+            &storage,
+            &vec![test_package_path()],
+            cloudsmith_data,
+        )
+        .await;
+
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert!(
+            !upload_called.load(Ordering::SeqCst),
+            "Upload slots and file upload should be skipped when package already exists in pre-check"
+        );
     }
 
     #[test]
