@@ -354,8 +354,14 @@ pub fn link_file(
         // Copy file permissions and timestamps
         fs::set_permissions(&destination_path, metadata.permissions())
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-        filetime::set_file_times(&destination_path, modification_time, modification_time)
-            .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+        let modification_time = std::time::SystemTime::from(modification_time);
+        std::fs::set_times(
+            &destination_path,
+            std::fs::FileTimes::new()
+                .set_accessed(modification_time)
+                .set_modified(modification_time),
+        )
+        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
 
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
@@ -512,9 +518,16 @@ fn reflink_to_destination(
                         .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
                     fs::set_permissions(destination_path, metadata.permissions())
                         .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-                    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-                    filetime::set_file_times(destination_path, file_time, file_time)
-                        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+                    let file_time = metadata
+                        .modified()
+                        .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                    std::fs::set_times(
+                        destination_path,
+                        std::fs::FileTimes::new()
+                            .set_accessed(file_time)
+                            .set_modified(file_time),
+                    )
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
                 }
 
                 return Ok(LinkMethod::Reflink);
@@ -621,9 +634,16 @@ fn symlink_to_destination(
                 // Copy timestamps as permissions are not relevant on soft links
                 let metadata = fs::symlink_metadata(source_path)
                     .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-                filetime::set_symlink_file_times(destination_path, file_time, file_time)
-                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+                let file_time = metadata
+                    .modified()
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                std::fs::set_times_nofollow(
+                    destination_path,
+                    std::fs::FileTimes::new()
+                        .set_accessed(file_time)
+                        .set_modified(file_time),
+                )
+                .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
 
                 return Ok(LinkMethod::Softlink);
             }
@@ -664,9 +684,16 @@ fn copy_to_destination(
     // Copy file modification times, fs::copy transfers file permissions automatically
     let metadata =
         fs::symlink_metadata(source_path).map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-    filetime::set_file_times(destination_path, file_time, file_time)
-        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+    let file_time = metadata
+        .modified()
+        .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+    std::fs::set_times(
+        destination_path,
+        std::fs::FileTimes::new()
+            .set_accessed(file_time)
+            .set_modified(file_time),
+    )
+    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
 
     Ok(LinkMethod::Copy)
 }
@@ -776,7 +803,14 @@ mod test {
         .unwrap();
 
         let source_time = filetime::FileTime::from_unix_time(1_000_000, 0);
-        filetime::set_file_times(package_dir.join("config.py"), source_time, source_time).unwrap();
+        let source_system_time = std::time::SystemTime::from(source_time);
+        std::fs::set_times(
+            package_dir.join("config.py"),
+            std::fs::FileTimes::new()
+                .set_accessed(source_system_time)
+                .set_modified(source_system_time),
+        )
+        .unwrap();
 
         let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
         let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
@@ -841,7 +875,14 @@ mod test {
         fs::write(package_dir.join("data.txt"), "no prefix here\n").unwrap();
 
         let source_time = filetime::FileTime::from_unix_time(1_000_000, 0);
-        filetime::set_file_times(package_dir.join("data.txt"), source_time, source_time).unwrap();
+        let source_system_time = std::time::SystemTime::from(source_time);
+        std::fs::set_times(
+            package_dir.join("data.txt"),
+            std::fs::FileTimes::new()
+                .set_accessed(source_system_time)
+                .set_modified(source_system_time),
+        )
+        .unwrap();
 
         let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
         let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
