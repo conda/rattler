@@ -1543,6 +1543,22 @@ mod test {
         assert_eq!(cached.info.arch_info, info.arch_info);
         assert_eq!(cached.sources, sources);
 
+        // The cache may be shared, so it must respect the umask like
+        // `File::create`.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |path: &std::path::Path| {
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+            };
+            let reference = dir.path().join("reference");
+            std::fs::File::create(&reference).unwrap();
+            assert_eq!(
+                mode(&dir.path().join(cache::CACHE_FILE_NAME)),
+                mode(&reference)
+            );
+        }
+
         // Updating the cache should atomically replace the previous file.
         let updated_info = CudaInfo {
             version: Some(Version::from_str("12.5").unwrap()),

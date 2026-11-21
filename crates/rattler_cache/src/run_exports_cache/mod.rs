@@ -259,7 +259,7 @@ impl RunExportsCache {
                     // Extract any potential error
                     let err = match temp_file {
                         Ok(result) => {
-                            let output_temp_file = NamedTempFile::new()?;
+                            let output_temp_file = rattler_conda_types::utils::shared_tempfile_builder().tempfile()?;
                             // Clone the file handler to be able to pass it to the blocking task
                             let mut file_handler = output_temp_file.as_file().try_clone()?;
                             // now extract run_exports.json from the archive without unpacking

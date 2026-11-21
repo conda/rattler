@@ -27,7 +27,7 @@ use std::{
     str::FromStr,
 };
 
-const CACHE_FILE_NAME: &str = "cuda-info-v1.json";
+pub(super) const CACHE_FILE_NAME: &str = "cuda-info-v1.json";
 
 /// Full detections (with compute capability) are trusted for a day; the fingerprints catch most
 /// changes sooner, so this is only a staleness backstop.
@@ -450,7 +450,7 @@ pub(super) fn write_with_env(
     // Write to a temporary file in the cache directory and persist it into place so concurrent
     // readers never see a partial cache file.
     let path = cache_dir.join(CACHE_FILE_NAME);
-    let mut tmp = match tempfile::NamedTempFile::new_in(cache_dir) {
+    let mut tmp = match rattler_conda_types::utils::shared_tempfile_in(cache_dir) {
         Ok(tmp) => tmp,
         Err(err) => {
             tracing::debug!(
