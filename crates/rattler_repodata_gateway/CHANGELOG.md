@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.5...rattler_repodata_gateway-v0.38.6) - 2026-11-21
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.38.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.38.4...rattler_repodata_gateway-v0.38.5) - 2026-11-16
 
 ### Other

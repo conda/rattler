@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.16](https://github.com/conda/rattler/compare/rattler_lock-v0.34.15...rattler_lock-v0.34.16) - 2026-11-21
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.34.15](https://github.com/conda/rattler/compare/rattler_lock-v0.34.14...rattler_lock-v0.34.15) - 2026-11-12
 
 ### Other
