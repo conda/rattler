@@ -600,13 +600,17 @@ pub fn parse_flags(input: &str) -> Result<Vec<StringMatcher>, ParseMatchSpecErro
                 })
                 .map_or_else(|| Cow::Borrowed(raw), unescape_string);
 
-            if !is_valid_matchspec_flag(&flag) {
-                return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.into_owned()));
-            }
-
-            StringMatcher::from_str(&flag).map_err(ParseMatchSpecError::from)
+            parse_flag(&flag)
         })
         .collect()
+}
+
+/// Parses a single variant flag matcher, such as `cuda` or `blas:*`.
+fn parse_flag(flag: &str) -> Result<StringMatcher, ParseMatchSpecError> {
+    if !is_valid_matchspec_flag(flag) {
+        return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.to_string()));
+    }
+    StringMatcher::from_str(flag).map_err(ParseMatchSpecError::from)
 }
 
 /// Parses a [`BracketVec`] into precise components
@@ -662,13 +666,11 @@ fn parse_bracket_vec_into_components(
             "flags" => {
                 if options.allow_flags() {
                     // Same rule as `extras`: a string is a single flag, so
-                    // `flags="a,b"` is rejected.
-                    if let BracketValue::Scalar(flag) = bracket_value
-                        && flag.contains(',')
-                    {
-                        return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.to_string()));
-                    }
-                    match_spec.flags = Some(parse_flags(value)?);
+                    // `flags="a,b"` is an invalid flag rather than two.
+                    match_spec.flags = Some(match bracket_value {
+                        BracketValue::Scalar(flag) => vec![parse_flag(flag.trim())?],
+                        BracketValue::List(items) => parse_flags(items)?,
+                    });
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
                 }
