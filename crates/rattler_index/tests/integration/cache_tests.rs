@@ -3,7 +3,7 @@
 use opendal::Operator;
 use rattler_index::{RepodataFileMetadata, cache::read_package_with_retry};
 
-use super::etag_memory_backend::ETagMemoryBuilder;
+use tools::etag_memory_backend::ETagMemoryBuilder;
 
 /// Validates that `read_package_with_retry` successfully retries when the file
 /// changes between stat and read operations.

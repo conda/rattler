@@ -37,6 +37,7 @@ path = "src/main.rs"
 thiserror = { workspace = true }
 ahash = { workspace = true }
 anyhow = { workspace = true }
+astral_async_zip = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }
@@ -77,8 +78,10 @@ zstd = { workspace = true }
 retry-policies = { workspace = true }
 
 [dev-dependencies]
+axum = { workspace = true }
+zip = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",
 ] }
 tempfile = { workspace = true }
-tools = { path = "../tools", default-features = false }
+tools = { path = "../tools", default-features = false, features = ["opendal"] }

@@ -277,12 +277,12 @@ async fn patch_transitions_preserve_publication_history_including_legacy_missing
 /// retries must use its publication time even when reusing cached archive data.
 #[tokio::test]
 async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
-    use super::etag_memory_backend::{ETagMemoryBuilder, Operation, TestHooks};
     use opendal::Operator;
     use std::sync::{
         Arc, OnceLock,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     };
+    use tools::etag_memory_backend::{ETagMemoryBuilder, Operation, TestHooks};
 
     let temp = tempfile::tempdir().unwrap();
     let filename = archive(temp.path(), true, false);
@@ -293,15 +293,18 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
     let operator = Arc::new(OnceLock::<Operator>::new());
     let injected = Arc::new(AtomicBool::new(false));
     let archive_reads = Arc::new(AtomicUsize::new(0));
+    let reads_before_retry = Arc::new(AtomicUsize::new(0));
     let hooks = TestHooks {
         on_operation: Arc::new({
             let operator = operator.clone();
             let injected = injected.clone();
             let archive_reads = archive_reads.clone();
+            let reads_before_retry = reads_before_retry.clone();
             move |path, operation| {
                 let operator = operator.clone();
                 let injected = injected.clone();
                 let archive_reads = archive_reads.clone();
+                let reads_before_retry = reads_before_retry.clone();
                 let competing = competing.clone();
                 let path = path.to_owned();
                 Box::pin(async move {
@@ -312,6 +315,8 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
                         && operation == Operation::BeforeWrite
                         && !injected.swap(true, Ordering::SeqCst)
                     {
+                        reads_before_retry
+                            .store(archive_reads.load(Ordering::SeqCst), Ordering::SeqCst);
                         operator
                             .get()
                             .unwrap()
@@ -344,9 +349,10 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
     .await
     .unwrap();
     assert_eq!(stats.subdirs.values().map(|s| s.retries).sum::<usize>(), 1);
+    assert!(reads_before_retry.load(Ordering::SeqCst) > 0);
     assert_eq!(
         archive_reads.load(Ordering::SeqCst),
-        1,
+        reads_before_retry.load(Ordering::SeqCst),
         "retry should reuse cached archive metadata"
     );
     let repodata: Value =
