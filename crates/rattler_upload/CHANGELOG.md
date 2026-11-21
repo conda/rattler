@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1](https://github.com/conda/rattler/compare/rattler_upload-v0.16.0...rattler_upload-v0.16.1) - 2026-11-21
+
+### Fixed
+
+- *(rattler_upload)* fix Cloudsmith multipart upload for packages >= 100 MiB ([#3149](https://github.com/conda/rattler/pull/3149)) ([#3198](https://github.com/conda/rattler/pull/3198))
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.16.0](https://github.com/conda/rattler/compare/rattler_upload-v0.15.6...rattler_upload-v0.16.0) - 2026-11-16
 
 ### Added
