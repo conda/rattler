@@ -629,6 +629,7 @@ fn parse_bracket_vec_into_components(
         }
     }
 
+    let strict = options.strictness() == ParseStrictness::Strict;
     for elem in bracket {
         let (key, bracket_value) = elem;
         let value = bracket_value.as_str();
@@ -640,11 +641,11 @@ fn parse_bracket_vec_into_components(
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "extras" => {
                 if options.allow_extras() {
-                    // CEP 44: a string selects exactly one group, so
-                    // `extras="a,b"` is an invalid name rather than two groups.
+                    // CEP 44: in strict mode a string selects exactly one
+                    // group, so `extras="a,b"` is an invalid name rather than
+                    // two groups. Only `[a, b]` is a list.
                     match_spec.extras = Some(match bracket_value {
-                        BracketValue::List(items) => parse_extras(items)?,
-                        BracketValue::Scalar(name) => {
+                        BracketValue::Scalar(name) if strict => {
                             let name = name.trim();
                             if !is_valid_extra_group_name(name) {
                                 return Err(ParseMatchSpecError::InvalidExtraName(
@@ -653,6 +654,7 @@ fn parse_bracket_vec_into_components(
                             }
                             vec![name.to_string()]
                         }
+                        _ => parse_extras(value)?,
                     });
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
@@ -660,6 +662,14 @@ fn parse_bracket_vec_into_components(
             }
             "flags" => {
                 if options.allow_flags() {
+                    // Same rule as `extras`: in strict mode a string is a
+                    // single flag, so `flags="a,b"` is rejected.
+                    if strict
+                        && let BracketValue::Scalar(flag) = bracket_value
+                        && flag.contains(',')
+                    {
+                        return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.to_string()));
+                    }
                     match_spec.flags = Some(parse_flags(value)?);
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
@@ -2762,6 +2772,23 @@ mod tests {
             Err(ParseMatchSpecError::InvalidExtraName(name)) if name == "bar,baz"
         ));
         assert!(MatchSpec::from_str("foo[extras='bar, baz']", opts).is_err());
+        // The same rule applies to flags in strict mode.
+        let flag_opts = ParseMatchSpecOptions::strict().with_flags(true);
+        assert!(matches!(
+            MatchSpec::from_str("foo[flags=\"cuda,mkl\"]", flag_opts),
+            Err(ParseMatchSpecError::InvalidFlagMatcher(flag)) if flag == "cuda,mkl"
+        ));
+        assert!(MatchSpec::from_str("foo[flags=\"cuda\"]", flag_opts).is_ok());
+        // Lenient parsing keeps splitting comma-separated strings.
+        let lenient = ParseMatchSpecOptions::lenient()
+            .with_extras(true)
+            .with_flags(true);
+        let spec =
+            MatchSpec::from_str("foo[extras=\"bar,baz\", flags=\"cuda,mkl\"]", lenient).unwrap();
+        assert_eq!(
+            spec.to_string(),
+            "foo[extras=[bar, baz], flags=[cuda, mkl]]"
+        );
 
         // Trailing comma in extras list
         assert!(MatchSpec::from_str("foo[extras=[bar,]]", opts).is_err());
