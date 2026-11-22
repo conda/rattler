@@ -37,7 +37,7 @@ impl PartialOrd<Self> for UrlOrPath {
 
 impl Ord for UrlOrPath {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
+        match (self.normalize().as_ref(), other.normalize().as_ref()) {
             (UrlOrPath::Url(self_url), UrlOrPath::Url(other_url)) => self_url.cmp(other_url),
             (UrlOrPath::Path(self_path), UrlOrPath::Path(other_path)) => {
                 self_path.as_str().cmp(other_path.as_str())
@@ -420,6 +420,38 @@ mod test {
                 UrlOrPath::Path(path.into())
             );
         }
+    }
+
+    #[test]
+    fn test_ord_consistent_with_eq() {
+        use std::collections::BTreeSet;
+
+        // Path equivalence with relative / redundant segments
+        let a = UrlOrPath::Path("./test-file.txt".into());
+        let b = UrlOrPath::Path("test-file.txt".into());
+        assert_eq!(a, b);
+        assert_eq!(a.cmp(&b), Ordering::Equal);
+        assert_eq!(b.cmp(&a), Ordering::Equal);
+
+        // URL vs Path equivalence for file:// URLs
+        let c = UrlOrPath::Url("file:///home/bob/test-file.txt".parse().unwrap());
+        let d = UrlOrPath::Path("/home/bob/test-file.txt".into());
+        assert_eq!(c, d);
+        assert_eq!(c.cmp(&d), Ordering::Equal);
+        assert_eq!(d.cmp(&c), Ordering::Equal);
+
+        // BTreeSet must treat equivalent items as identical
+        let mut set = BTreeSet::new();
+        set.insert(a.clone());
+        assert!(set.contains(&b));
+        set.insert(b);
+        assert_eq!(set.len(), 1);
+
+        let mut file_set = BTreeSet::new();
+        file_set.insert(c.clone());
+        assert!(file_set.contains(&d));
+        file_set.insert(d);
+        assert_eq!(file_set.len(), 1);
     }
 
     #[test]
