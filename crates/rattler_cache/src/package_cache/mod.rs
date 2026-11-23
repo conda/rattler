@@ -40,6 +40,10 @@ use crate::validation::{ValidationMode, validate_package_directory_lazily};
 
 mod cache_key;
 mod cache_lock;
+#[cfg(all(test, unix))]
+mod permission_scenarios;
+#[cfg(all(test, unix))]
+mod permissions_tests;
 mod reporter;
 
 #[derive(Clone)]
@@ -340,20 +344,74 @@ impl From<PackageCacheLayerError> for PackageCacheError {
     }
 }
 
-/// Returns `true` if `path` lives on a filesystem that is *mounted* read-only.
-///
-/// Permission bits miss filesystems mounted read-only (CVMFS, squashfs,
-/// read-only bind mounts): a mode-0755 directory still reports as writable, so
-/// we additionally check the `ST_RDONLY` mount flag via `statvfs(3)`.
+/// Check the effective user's access, including ACLs and read-only mounts.
+/// For a cache that does not exist yet, check where it would be created.
 #[cfg(unix)]
-fn is_mounted_readonly(path: &Path) -> bool {
-    rustix::fs::statvfs(path)
-        .is_ok_and(|s| s.f_flag.contains(rustix::fs::StatVfsMountFlags::RDONLY))
+fn is_directory_readonly(mut path: &Path) -> bool {
+    use rustix::fs::{Access, AtFlags, CWD, accessat};
+    use rustix::io::Errno;
+
+    loop {
+        if path.as_os_str().is_empty() {
+            path = Path::new(".");
+        }
+        // Directories with no write bits are read-only even for root.
+        if path.metadata().is_ok_and(|m| m.permissions().readonly()) {
+            return true;
+        }
+        match accessat(
+            CWD,
+            path,
+            Access::WRITE_OK | Access::EXEC_OK,
+            AtFlags::EACCESS,
+        ) {
+            Err(Errno::ACCESS | Errno::PERM | Errno::ROFS) => return true,
+            Err(Errno::NOENT) => match path.parent() {
+                Some(parent) => path = parent,
+                None => return false,
+            },
+            // Let the actual write report errors unrelated to permissions.
+            Ok(()) | Err(_) => return false,
+        }
+    }
 }
 
 #[cfg(not(unix))]
-fn is_mounted_readonly(_path: &Path) -> bool {
-    false
+fn is_directory_readonly(path: &Path) -> bool {
+    path.metadata().is_ok_and(|m| m.permissions().readonly())
+}
+
+fn is_permission_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
+    )
+}
+
+impl PackageCacheLayerError {
+    fn is_permission_error(&self) -> bool {
+        let error: &(dyn Error + 'static) = match self {
+            Self::LockError(_, error) => return is_permission_error(error),
+            Self::FetchError(error) => error.as_ref(),
+            Self::OtherError(error) => error.as_ref(),
+            _ => return false,
+        };
+
+        std::iter::successors(Some(error), |&error| {
+            // FetchError is transparent, so source() skips its inner error.
+            match error.downcast_ref::<Self>() {
+                Some(Self::FetchError(error)) => Some(error.as_ref()),
+                _ => error.source(),
+            }
+        })
+        .filter_map(|error| error.downcast_ref::<std::io::Error>())
+        .any(is_permission_error)
+    }
+
+    fn is_cache_write_permission_error(&self) -> bool {
+        // A fetch error can refer to an unreadable source, not the cache.
+        matches!(self, Self::LockError(..) | Self::OtherError(..)) && self.is_permission_error()
+    }
 }
 
 impl PackageCacheLayer {
@@ -410,12 +468,9 @@ impl PackageCacheLayer {
         self.filter.accepts(cache_key)
     }
 
-    /// Determine if the layer is read-only in the filesystem
+    /// Determine whether the layer is read-only for the current process.
     pub fn is_readonly(&self) -> bool {
-        self.path
-            .metadata()
-            .is_ok_and(|m| m.permissions().readonly())
-            || is_mounted_readonly(&self.path)
+        is_directory_readonly(&self.path)
     }
 
     /// A writable layer may still contain a read-only wheel namespace.
@@ -426,11 +481,7 @@ impl PackageCacheLayer {
         match key.namespace {
             cache_key::CacheNamespace::Conda => false,
             cache_key::CacheNamespace::Wheel(_) => {
-                let namespace = self.path.join(key.namespace.directory());
-                namespace
-                    .metadata()
-                    .is_ok_and(|m| m.permissions().readonly())
-                    || is_mounted_readonly(&namespace)
+                is_directory_readonly(&self.path.join(key.namespace.directory()))
             }
         }
     }
@@ -487,7 +538,7 @@ impl PackageCacheLayer {
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheLayerError>
     where
-        F: (Fn(PathBuf) -> Fut) + Send + 'static,
+        F: (FnMut(PathBuf) -> Fut) + Send,
         Fut: Future<Output = Result<Option<Sha256Hash>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
@@ -570,15 +621,15 @@ impl PackageCache {
     /// This is particularly useful when installing many packages at once,
     /// as it significantly reduces the number of file locking syscalls.
     pub async fn acquire_global_lock(&self) -> Result<CacheGlobalLock, PackageCacheError> {
-        // Use the first writable layer's path for the global cache lock
-        let (_, writable_layers) = self.split_layers();
-        let cache_layer = writable_layers
-            .first()
+        // Falling back to a different lock could leave writes uncoordinated.
+        let cache_layer = self
+            .inner
+            .layers
+            .iter()
+            .find(|layer| !layer.is_readonly())
             .ok_or(PackageCacheError::NoWritableLayers)?;
 
         let lock_file_path = cache_layer.path.join(".cache.lock");
-
-        // Ensure the directory exists
         tokio_fs::create_dir_all(&cache_layer.path)
             .await
             .map_err(|e| {
@@ -741,16 +792,19 @@ impl PackageCache {
     /// found in any eligible layer, it is returned immediately. Otherwise the
     /// package is fetched and written to the first eligible writable layer.
     /// Unfiltered layers are eligible for every package.
+    /// If cache writes fail because access is denied or the filesystem became
+    /// read-only, the next eligible writable layer is tried. Other errors are
+    /// returned. Fetch errors are only retried across layers when they report a
+    /// permission error and the destination layer is no longer writable.
     ///
-    /// If the package is already being fetched by another task/thread the
-    /// request is coalesced. No duplicate fetch is performed.
+    /// Concurrent requests for the same entry in a layer are coalesced.
     ///
     /// `fetch` returns the sha256 of the archive it extracted, which is
     /// recorded for the entry, or `None` if it does not know it.
     pub async fn get_or_fetch<F, Fut, E>(
         &self,
         pkg: impl Into<CacheKey>,
-        fetch: F,
+        mut fetch: F,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError>
     where
@@ -795,23 +849,30 @@ impl PackageCache {
             }
         }
 
-        // No matches in eligible layers: write to the first eligible,
-        // writable layer.
-        tracing::debug!("no matches in eligible layers; writing to first eligible writable layer");
-        if let Some(layer) = self
+        let mut last_error = None;
+        for layer in self
             .inner
             .layers
             .iter()
-            .filter(|layer| layer.accepts(&cache_key))
-            .find(|layer| !layer.is_readonly_for(&cache_key))
+            .filter(|layer| layer.accepts(&cache_key) && !layer.is_readonly_for(&cache_key))
         {
-            return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
-                Ok(cache_metadata) => Ok(cache_metadata),
-                Err(e) => Err(e.into()),
-            };
+            // Borrow exclusively so the callback need not be Clone or Sync.
+            match layer
+                .validate_or_fetch(&mut fetch, &cache_key, reporter.clone())
+                .await
+            {
+                Ok(metadata) => return Ok(metadata),
+                Err(error)
+                    if error.is_cache_write_permission_error()
+                        || (error.is_permission_error() && layer.is_readonly_for(&cache_key)) =>
+                {
+                    tracing::debug!(path = %layer.path.display(), %error, "cache layer is not writable");
+                    last_error = Some(error);
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
-
-        Err(PackageCacheError::NoWritableLayers)
+        Err(last_error.map_or(PackageCacheError::NoWritableLayers, Into::into))
     }
 
     /// Returns the directory that contains the specified package.
@@ -1241,12 +1302,12 @@ async fn validate_package_common<F, Fut, E>(
     path: PathBuf,
     known_valid_revision: Option<u64>,
     given_sha: Option<&Sha256Hash>,
-    fetch: Option<F>,
+    mut fetch: Option<F>,
     reporter: Option<Arc<dyn CacheReporter>>,
     validation_mode: ValidationMode,
 ) -> Result<CacheMetadata, PackageCacheLayerError>
 where
-    F: Fn(PathBuf) -> Fut + Send,
+    F: FnMut(PathBuf) -> Fut + Send,
     Fut: Future<Output = Result<Option<Sha256Hash>, E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
@@ -1346,7 +1407,7 @@ where
     // If the cache is stale, we need to fetch the package again.
     // Since we hold the global cache lock, we can safely update the metadata
     // and fetch the package without worrying about concurrent modifications.
-    if let Some(ref fetch_fn) = fetch {
+    if let Some(fetch_fn) = &mut fetch {
         // Bump the revision and forget the old hash until the new package is
         // in place, so an interrupted fetch never leaves a hash behind that
         // vouches for content it did not produce.
@@ -1372,11 +1433,13 @@ where
             .prefix(&format!(".{prefix}"))
             .tempdir_in(parent_dir)
             .map_err(|e| {
-                PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
-                    "failed to create temp directory in '{}': {}",
-                    parent_dir.display(),
-                    e
-                ))))
+                PackageCacheLayerError::OtherError(Box::new(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to create temp directory in '{}': {e}",
+                        parent_dir.display()
+                    ),
+                )))
             })?;
 
         // Fetch/extract the package to the temporary directory.
@@ -1385,17 +1448,14 @@ where
         // Handle fetch result
         match fetch_result {
             Ok(fetched_sha) => {
-                // Take ownership of the temp directory path so it won't be auto-deleted
-                let temp_path = temp_dir.keep();
-
                 // Remove any existing (potentially corrupted) directory at the final path
                 if path.is_dir() {
                     tokio_fs::remove_dir_all(&path).await.map_err(|e| {
-                        PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(
+                        PackageCacheLayerError::OtherError(Box::new(std::io::Error::new(
+                            e.kind(),
                             format!(
-                                "failed to remove existing cache directory '{}': {}",
-                                path.display(),
-                                e
+                                "failed to remove existing cache directory '{}': {e}",
+                                path.display()
                             ),
                         )))
                     })?;
@@ -1403,14 +1463,19 @@ where
 
                 // Atomically rename the temp directory into the cache;
                 // see `rename_with_retry` for the Windows retry rationale.
-                rename_with_retry(&temp_path, &path).await.map_err(|e| {
-                    PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
-                        "failed to rename temp directory '{}' to '{}': {}",
-                        temp_path.display(),
-                        path.display(),
-                        e
-                    ))))
-                })?;
+                rename_with_retry(temp_dir.path(), &path)
+                    .await
+                    .map_err(|e| {
+                        PackageCacheLayerError::OtherError(Box::new(std::io::Error::new(
+                            e.kind(),
+                            format!(
+                                "failed to rename temp directory '{}' to '{}': {e}",
+                                temp_dir.path().display(),
+                                path.display(),
+                            ),
+                        )))
+                    })?;
+                let _ = temp_dir.keep();
 
                 // Record the hash of what was actually fetched, not the one
                 // that was asked for. Bump the revision again: anyone who
