@@ -954,7 +954,8 @@ fn with_unique_uuid(binary: &[u8], seed: &str) -> Vec<u8> {
     out
 }
 
-/// Byte range of the `LC_UUID` payload in a thin little-endian 64-bit Mach-O.
+/// Returns the byte range of the 16-byte UUID in a 64-bit little-endian
+/// Mach-O binary's `LC_UUID` load command, or `None` if absent or malformed.
 fn lc_uuid_range(binary: &[u8]) -> Option<std::ops::Range<usize>> {
     const MH_MAGIC_64: u32 = 0xfeed_facf;
     const LC_UUID: u32 = 0x1b;
@@ -966,14 +967,18 @@ fn lc_uuid_range(binary: &[u8]) -> Option<std::ops::Range<usize>> {
     if read_u32(0)? != MH_MAGIC_64 {
         return None;
     }
-    let mut offset = 32; // size of mach_header_64
-    let end = binary.len().min(offset + read_u32(20)? as usize); // + sizeofcmds
-    for _ in 0..read_u32(16)? {
+    // Load commands start right after the 32-byte mach_header_64.
+    let mut offset = 32;
+    let end = binary.len().min(offset + read_u32(20)? as usize); // header.sizeofcmds
+    for _ in 0..read_u32(16)? { // header.ncmds
+        // Each load command begins with { cmd: u32, cmdsize: u32 }.
         let cmdsize = read_u32(offset + 4)? as usize;
+        // Reject sizes that can't hold the prefix or that overrun the commands area.
         if cmdsize < 8 || offset + cmdsize > end {
             return None;
         }
         if read_u32(offset)? == LC_UUID {
+            // uuid_command is { cmd, cmdsize, uuid: [u8; 16] }, 24 bytes total.
             return (cmdsize >= 24).then_some(offset + 8..offset + 24);
         }
         offset += cmdsize;
