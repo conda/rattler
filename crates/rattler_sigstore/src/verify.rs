@@ -20,8 +20,10 @@
 //! Which signing identities are trusted is decided afterwards by the
 //! [`VerificationPolicy`].
 
+use std::str::FromStr;
+
 use jiff::Timestamp;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{RepoDataRecord, Version};
 use rattler_redaction::Redact;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
@@ -228,6 +230,20 @@ pub fn verify_bundles(
         .sha256
         .as_ref()
         .ok_or_else(|| SigstoreError::MissingPackageSha256(filename.clone()))?;
+    // The attestation subject is the file name, but the solver and installer
+    // use the name, version and build of the record. Both come from unsigned
+    // repodata, so they must describe the same package.
+    if !identifier_matches_record(record) {
+        return Err(SigstoreError::RecordMismatch {
+            package: filename,
+            record: format!(
+                "{}-{}-{}",
+                record.package_record.name.as_source(),
+                record.package_record.version.as_str(),
+                record.package_record.build
+            ),
+        });
+    }
     let artifact = Artifact::from_digest(
         sigstore_types::Sha256Hash::try_from(sha256.as_slice())
             .expect("rattler SHA-256 digests always contain 32 bytes"),
@@ -258,6 +274,17 @@ pub fn verify_bundles(
         }
     }
     Ok(result)
+}
+
+/// Returns whether the name, version and build in the file name of `record`
+/// are the ones of its package record.
+fn identifier_matches_record(record: &RepoDataRecord) -> bool {
+    let identifier = &record.identifier.identifier;
+    let package = &record.package_record;
+    identifier.name.to_lowercase() == package.name.as_normalized()
+        && Version::from_str(&identifier.version)
+            .is_ok_and(|version| version == *package.version.version())
+        && package.build == identifier.build_string.as_str()
 }
 
 fn verify_bundle(

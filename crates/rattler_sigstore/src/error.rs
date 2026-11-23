@@ -17,6 +17,16 @@ pub enum SigstoreError {
     #[error("{0} has no sha256 in its record, cannot bind attestations to it")]
     MissingPackageSha256(String),
 
+    /// The name, version or build of the package record differ from the ones
+    /// in its file name, which is what the attestation subject names.
+    #[error("the repodata record of {package} describes a different package ({record})")]
+    RecordMismatch {
+        /// The package filename.
+        package: String,
+        /// The name, version and build of the record.
+        record: String,
+    },
+
     /// The sidecar URL could not be derived from the package URL.
     #[error("cannot derive an attestation sidecar URL from {}", .0.clone().redact())]
     InvalidSidecarUrl(Url),
