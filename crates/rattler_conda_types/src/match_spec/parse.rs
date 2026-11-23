@@ -5,7 +5,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
     character::complete::{char, multispace0, one_of, space0},
-    combinator::{opt, recognize},
+    combinator::{map, opt, recognize},
     error::{ContextError, ParseError, context},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
@@ -263,7 +263,25 @@ fn reject_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError>
 /// string `[key1=value1, key2=value2]`. The optimization stores two such values
 /// on the stack and otherwise allocates a vector on the heap. Two is chosen
 /// because that seems to be more than enough for most use cases.
-type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
+type BracketVec<'a> = SmallVec<[(&'a str, BracketValue<'a>); 2]>;
+
+/// A value in a bracket string, recording whether it was written as a list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BracketValue<'a> {
+    /// A bare or quoted value, such as `1.2.3` or `"1.2.3"`, without quotes.
+    Scalar(&'a str),
+    /// A list such as `[a, b]`, holding the text between the brackets.
+    List(&'a str),
+}
+
+impl<'a> BracketValue<'a> {
+    /// The value's text, without quotes or list brackets.
+    fn as_str(self) -> &'a str {
+        match self {
+            BracketValue::Scalar(value) | BracketValue::List(value) => value,
+        }
+    }
+}
 
 /// A parse combinator to filter whitespace if front and after another parser.
 fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
@@ -396,31 +414,39 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
     }
 
     /// Parses a value in a bracket string.
-    fn parse_value(input: &str) -> IResult<&str, &str> {
+    fn parse_value(input: &str) -> IResult<&str, BracketValue<'_>> {
         whitespace_enclosed(context(
             "value",
             alt((
-                parse_quoted_string_with_escapes('"'),
-                parse_quoted_string_with_escapes('\''),
-                delimited(char('['), take_until("]"), char(']')),
-                take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
+                map(
+                    delimited(char('['), take_until("]"), char(']')),
+                    BracketValue::List,
+                ),
+                map(
+                    alt((
+                        parse_quoted_string_with_escapes('"'),
+                        parse_quoted_string_with_escapes('\''),
+                        take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
+                    )),
+                    BracketValue::Scalar,
+                ),
             )),
         ))
         .parse(input)
     }
 
     /// Parses a `key=value` pair
-    fn parse_key_value(input: &str) -> IResult<&str, (&str, &str)> {
+    fn parse_key_value(input: &str) -> IResult<&str, (&str, BracketValue<'_>)> {
         separated_pair(parse_key, char('='), parse_value).parse(input)
     }
 
     /// Parses a list of `key=value` pairs separated by commas
-    fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
+    fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, BracketValue<'_>)>> {
         separated_list0(whitespace_enclosed(char(',')), parse_key_value).parse(input)
     }
 
     /// Parses an entire bracket string
-    fn parse_bracket_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
+    fn parse_bracket_list(input: &str) -> IResult<&str, Vec<(&str, BracketValue<'_>)>> {
         delimited(char('['), parse_key_value_list, char(']')).parse(input)
     }
 
@@ -509,10 +535,7 @@ pub(crate) fn is_valid_extra_group_name(name: &str) -> bool {
 /// names that do not conform produce a [`ParseMatchSpecError::InvalidExtraName`]
 /// error.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
-    use nom::{
-        combinator::{all_consuming, map},
-        multi::separated_list1,
-    };
+    use nom::{combinator::all_consuming, multi::separated_list1};
 
     // Permissive tokenizer character set: anything that could plausibly be part
     // of a group name. The strict CEP 44 grammar is enforced separately below so
@@ -577,13 +600,17 @@ pub fn parse_flags(input: &str) -> Result<Vec<StringMatcher>, ParseMatchSpecErro
                 })
                 .map_or_else(|| Cow::Borrowed(raw), unescape_string);
 
-            if !is_valid_matchspec_flag(&flag) {
-                return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.into_owned()));
-            }
-
-            StringMatcher::from_str(&flag).map_err(ParseMatchSpecError::from)
+            parse_flag(&flag)
         })
         .collect()
+}
+
+/// Parses a single variant flag matcher, such as `cuda` or `blas:*`.
+fn parse_flag(flag: &str) -> Result<StringMatcher, ParseMatchSpecError> {
+    if !is_valid_matchspec_flag(flag) {
+        return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.to_string()));
+    }
+    StringMatcher::from_str(flag).map_err(ParseMatchSpecError::from)
 }
 
 /// Parses a [`BracketVec`] into precise components
@@ -607,7 +634,8 @@ fn parse_bracket_vec_into_components(
     }
 
     for elem in bracket {
-        let (key, value) = elem;
+        let (key, bracket_value) = elem;
+        let value = bracket_value.as_str();
         match key {
             "version" => {
                 match_spec.version = Some(VersionSpec::from_str(value, options.strictness())?);
@@ -616,14 +644,33 @@ fn parse_bracket_vec_into_components(
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "extras" => {
                 if options.allow_extras() {
-                    match_spec.extras = Some(parse_extras(value)?);
+                    // CEP 44: a string selects exactly one group, so
+                    // `extras="a,b"` is an invalid name rather than two
+                    // groups. Only `[a, b]` is a list.
+                    match_spec.extras = Some(match bracket_value {
+                        BracketValue::Scalar(name) => {
+                            let name = name.trim();
+                            if !is_valid_extra_group_name(name) {
+                                return Err(ParseMatchSpecError::InvalidExtraName(
+                                    name.to_string(),
+                                ));
+                            }
+                            vec![name.to_string()]
+                        }
+                        BracketValue::List(items) => parse_extras(items)?,
+                    });
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
                 }
             }
             "flags" => {
                 if options.allow_flags() {
-                    match_spec.flags = Some(parse_flags(value)?);
+                    // Same rule as `extras`: a string is a single flag, so
+                    // `flags="a,b"` is an invalid flag rather than two.
+                    match_spec.flags = Some(match bracket_value {
+                        BracketValue::Scalar(flag) => vec![parse_flag(flag.trim())?],
+                        BracketValue::List(items) => parse_flags(items)?,
+                    });
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
                 }
@@ -1207,7 +1254,7 @@ mod tests {
     use url::Url;
 
     use super::{
-        BracketVec, MatchSpec, ParseMatchSpecError, parse_channel_and_subdir,
+        BracketValue::Scalar, BracketVec, MatchSpec, ParseMatchSpecError, parse_channel_and_subdir,
         split_version_and_build, strip_brackets, strip_package_name, unescape_string,
     };
     use crate::match_spec::parse::parse_extras;
@@ -1227,27 +1274,28 @@ mod tests {
     fn test_strip_brackets() {
         let result = strip_brackets(r#"bla [version="1.2.3"]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec<'_> = smallvec![("version", "1.2.3")];
+        let expected: BracketVec<'_> = smallvec![("version", Scalar("1.2.3"))];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version='1.2.3']"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec<'_> = smallvec![("version", "1.2.3")];
+        let expected: BracketVec<'_> = smallvec![("version", Scalar("1.2.3"))];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec<'_> = smallvec![("version", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", Scalar("1"))];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"conda-forge::bla[version=1]"#).unwrap();
         assert_eq!(result.0, "conda-forge::bla");
-        let expected: BracketVec<'_> = smallvec![("version", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", Scalar("1"))];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version="1.2.3", build_number=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec<'_> = smallvec![("version", "1.2.3"), ("build_number", "1")];
+        let expected: BracketVec<'_> =
+            smallvec![("version", Scalar("1.2.3")), ("build_number", Scalar("1"))];
         assert_eq!(result.1, expected);
     }
 
@@ -1498,51 +1546,51 @@ mod tests {
     fn test_parse_bracket_list() {
         assert_eq!(
             parse_bracket_list("[version=1.0.1]").unwrap().as_ref(),
-            &[("version", "1.0.1")]
+            &[("version", Scalar("1.0.1"))]
         );
         assert_eq!(
             parse_bracket_list("[version='1.0.1']").unwrap().as_ref(),
-            &[("version", "1.0.1")]
+            &[("version", Scalar("1.0.1"))]
         );
         assert_eq!(
             parse_bracket_list("[version=\"1.0.1\"]").unwrap().as_ref(),
-            &[("version", "1.0.1")]
+            &[("version", Scalar("1.0.1"))]
         );
 
         assert_eq!(
             parse_bracket_list("[version=1.0.1, build=3]")
                 .unwrap()
                 .as_ref(),
-            &[("version", "1.0.1"), ("build", "3")]
+            &[("version", Scalar("1.0.1")), ("build", Scalar("3"))]
         );
         assert_eq!(
             parse_bracket_list("[version='1.0.1', build=3]")
                 .unwrap()
                 .as_ref(),
-            &[("version", "1.0.1"), ("build", "3")]
+            &[("version", Scalar("1.0.1")), ("build", Scalar("3"))]
         );
         assert_eq!(
             parse_bracket_list("[version=\"1.0.1\", build=3]")
                 .unwrap()
                 .as_ref(),
-            &[("version", "1.0.1"), ("build", "3")]
+            &[("version", Scalar("1.0.1")), ("build", Scalar("3"))]
         );
 
         assert_eq!(
             parse_bracket_list("[build=\"py2*\"]").unwrap().as_ref(),
-            &[("build", "py2*")]
+            &[("build", Scalar("py2*"))]
         );
 
         assert_eq!(
             parse_bracket_list("[build=py2*]").unwrap().as_ref(),
-            &[("build", "py2*")]
+            &[("build", Scalar("py2*"))]
         );
 
         assert_eq!(
             parse_bracket_list("[version=\"1.3,2.0\"]")
                 .unwrap()
                 .as_ref(),
-            &[("version", "1.3,2.0")]
+            &[("version", Scalar("1.3,2.0"))]
         );
     }
 
@@ -2343,9 +2391,9 @@ mod tests {
         let result = strip_brackets(r#"foo[version="1.0", build="py\"37\"_0"]"#).unwrap();
         assert_eq!(result.0, "foo");
         assert_eq!(result.1.len(), 2);
-        assert_eq!(result.1[0], ("version", "1.0"));
+        assert_eq!(result.1[0], ("version", Scalar("1.0")));
         // The value should still contain the escape sequences
-        assert_eq!(result.1[1], ("build", r#"py\"37\"_0"#));
+        assert_eq!(result.1[1], ("build", Scalar(r#"py\"37\"_0"#)));
     }
 
     #[test]
@@ -2629,6 +2677,16 @@ mod tests {
             Some(vec!["science".to_string(), "plot".to_string()])
         );
 
+        // A single group may be given as a bare or quoted string.
+        for spec in [
+            "foobar[extras=plot]",
+            "foobar[extras=\"plot\"]",
+            "foobar[extras=' plot ']",
+        ] {
+            let spec = MatchSpec::from_str(spec, opts).unwrap();
+            assert_eq!(spec.extras, Some(vec!["plot".to_string()]));
+        }
+
         // Single-quoted and a mix of quoted/unquoted items should also work.
         let spec = MatchSpec::from_str("foobar[extras=['science', plot]]", opts).unwrap();
         assert_eq!(
@@ -2707,6 +2765,26 @@ mod tests {
 
         // Missing brackets around extras list
         assert!(MatchSpec::from_str("foo[extras=bar,baz]", opts).is_err());
+
+        // A string selects a single group; commas do not split it (CEP 44)
+        assert!(matches!(
+            MatchSpec::from_str("foo[extras=\"bar,baz\"]", opts),
+            Err(ParseMatchSpecError::InvalidExtraName(name)) if name == "bar,baz"
+        ));
+        assert!(MatchSpec::from_str("foo[extras='bar, baz']", opts).is_err());
+        // The same rule applies to flags.
+        let flag_opts = ParseMatchSpecOptions::strict().with_flags(true);
+        assert!(matches!(
+            MatchSpec::from_str("foo[flags=\"cuda,mkl\"]", flag_opts),
+            Err(ParseMatchSpecError::InvalidFlagMatcher(flag)) if flag == "cuda,mkl"
+        ));
+        assert!(MatchSpec::from_str("foo[flags=\"cuda\"]", flag_opts).is_ok());
+        // Lenient parsing applies the same rule to both keys.
+        let lenient = ParseMatchSpecOptions::lenient()
+            .with_extras(true)
+            .with_flags(true);
+        assert!(MatchSpec::from_str("foo[extras=\"bar,baz\"]", lenient).is_err());
+        assert!(MatchSpec::from_str("foo[flags=\"cuda,mkl\"]", lenient).is_err());
 
         // Trailing comma in extras list
         assert!(MatchSpec::from_str("foo[extras=[bar,]]", opts).is_err());
