@@ -9,13 +9,13 @@
     },
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>How the CI provider’s OIDC ID token is exchanged for a bearer token.</p>
 </div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.TokenExchange" class="variant"><a href="#variant.TokenExchange" class="anchor">§</a><h3 class="code-header">TokenExchange</h3></section><div class="docblock"><p>OAuth 2.0 Token Exchange (RFC 8693) at <code>endpoint</code>.</p>
-</div><div class="sub-variant" id="variant.TokenExchange.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.TokenExchange.field.endpoint" class="section-header"><a href="#variant.TokenExchange.field.endpoint" class="anchor field">§</a><code>endpoint: <a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></code></span><div class="docblock"><p>The token endpoint, joined onto the server URL with <a href="https://docs.rs/url/2.5.7/url/struct.Url.html#method.join" title="method url::Url::join"><code>Url::join</code></a>:
+</div><div class="sub-variant" id="variant.TokenExchange.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.TokenExchange.field.endpoint" class="section-header"><a href="#variant.TokenExchange.field.endpoint" class="anchor field">§</a><code>endpoint: <a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></code></span><div class="docblock"><p>The token endpoint, joined onto the server URL with <a href="https://docs.rs/url/2.5.9/url/struct.Url.html#method.join" title="method url::Url::join"><code>Url::join</code></a>:
 either an absolute URL or a path starting with <code>/</code>. RFC 8693
 doesn’t define a path, so it must be configured.</p>
 </div></div></div><section id="variant.PrefixMint" class="variant"><a href="#variant.PrefixMint" class="anchor">§</a><h3 class="code-header">PrefixMint</h3></section><div class="docblock"><p>The prefix.dev convention: <code>POST {"token": "&lt;id token&gt;"}</code> to <code>path</code>;
 the response body is the bearer token. This is prefix.dev’s own API,
 not based on any standard.</p>
-<p><code>path</code> is joined onto the server URL with <a href="https://docs.rs/url/2.5.7/url/struct.Url.html#method.join" title="method url::Url::join"><code>Url::join</code></a>; it must
+<p><code>path</code> is joined onto the server URL with <a href="https://docs.rs/url/2.5.9/url/struct.Url.html#method.join" title="method url::Url::join"><code>Url::join</code></a>; it must
 start with <code>/</code> or it would resolve relative to the URL’s path.
 <a href="../trusted_publishing/struct.TrustedPublishingFlow.html#method.new" title="associated function rattler_networking::trusted_publishing::TrustedPublishingFlow::new"><code>crate::trusted_publishing::TrustedPublishingFlow::new</code></a> normalizes
 a missing leading slash.</p>

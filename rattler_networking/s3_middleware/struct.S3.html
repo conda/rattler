@@ -7,7 +7,7 @@
 ) -&gt; Self</h4></section></summary><div class="docblock"><p>Create a new S3 client wrapper.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.create_s3_client" class="method"><a class="src rightside" href="../../src/rattler_networking/s3_middleware.rs.html#235-320">Source</a><h4 class="code-header">pub async fn <a href="#method.create_s3_client" class="fn">create_s3_client</a>(
     &amp;self,
-    url: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>,
+    url: <a class="struct" href="https://docs.rs/url/2.5.9/url/struct.Url.html" title="struct url::Url">Url</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Client, <a class="enum" href="enum.S3MiddlewareError.html" title="enum rattler_networking::s3_middleware::S3MiddlewareError">S3MiddlewareError</a>&gt;</h4></section></summary><div class="docblock"><p>Create an S3 client.</p>
 <p>A client is created per request, and the credential provider behind it is
 asked for credentials while the request is signed, so expiring

@@ -13,7 +13,7 @@
     ConflictingArtifact,
     SourcePackage,
     NotAnArtifactUrl,
-    InvalidUrl(<a class="enum" href="https://docs.rs/url/2.5.7/url/parser/enum.ParseError.html" title="enum url::parser::ParseError">ParseError</a>),
+    InvalidUrl(<a class="enum" href="https://docs.rs/url/2.5.9/url/parser/enum.ParseError.html" title="enum url::parser::ParseError">ParseError</a>),
     InvalidDigest {
         algorithm: <a class="enum" href="enum.ChecksumAlgorithm.html" title="enum rattler_lock::conda_lock::ChecksumAlgorithm">ChecksumAlgorithm</a>,
     },
@@ -67,7 +67,7 @@ destination environment cannot contain both.</p>
 </div><section id="variant.ConflictingArtifact" class="variant"><a href="#variant.ConflictingArtifact" class="anchor">§</a><h3 class="code-header">ConflictingArtifact</h3></section><div class="docblock"><p>One artifact URL carries conflicting metadata in different categories.</p>
 </div><section id="variant.SourcePackage" class="variant"><a href="#variant.SourcePackage" class="anchor">§</a><h3 class="code-header">SourcePackage</h3></section><div class="docblock"><p>A package is built from source, which has no immutable artifact.</p>
 </div><section id="variant.NotAnArtifactUrl" class="variant"><a href="#variant.NotAnArtifactUrl" class="anchor">§</a><h3 class="code-header">NotAnArtifactUrl</h3></section><div class="docblock"><p>A URL is not a direct artifact download.</p>
-</div><section id="variant.InvalidUrl" class="variant"><a href="#variant.InvalidUrl" class="anchor">§</a><h3 class="code-header">InvalidUrl(<a class="enum" href="https://docs.rs/url/2.5.7/url/parser/enum.ParseError.html" title="enum url::parser::ParseError">ParseError</a>)</h3></section><div class="docblock"><p>A URL could not be parsed.</p>
+</div><section id="variant.InvalidUrl" class="variant"><a href="#variant.InvalidUrl" class="anchor">§</a><h3 class="code-header">InvalidUrl(<a class="enum" href="https://docs.rs/url/2.5.9/url/parser/enum.ParseError.html" title="enum url::parser::ParseError">ParseError</a>)</h3></section><div class="docblock"><p>A URL could not be parsed.</p>
 </div><section id="variant.InvalidDigest" class="variant"><a href="#variant.InvalidDigest" class="anchor">§</a><h3 class="code-header">InvalidDigest</h3></section><div class="docblock"><p>A checksum is not valid hexadecimal of the required length. Importing
 validates the lock file first, which already rejects those, so this is
 the honest handling of a digest that cannot be decoded rather than a

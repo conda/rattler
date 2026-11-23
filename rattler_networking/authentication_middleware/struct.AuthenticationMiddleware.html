@@ -7,8 +7,8 @@ storage</p>
 storage</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.with_credentials_from" class="method"><a class="src rightside" href="../../src/rattler_networking/authentication_middleware.rs.html#136-145">Source</a><h4 class="code-header">pub fn <a href="#method.with_credentials_from" class="fn">with_credentials_from</a>(
     self,
-    source_host: <a class="enum" href="https://docs.rs/url/2.5.7/url/host/enum.Host.html" title="enum url::host::Host">Host</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    trusted_origins: impl <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/iter/traits/collect/trait.IntoIterator.html" title="trait core::iter::traits::collect::IntoIterator">IntoIterator</a>&lt;Item = <a class="enum" href="https://docs.rs/url/2.5.7/url/origin/enum.Origin.html" title="enum url::origin::Origin">Origin</a>&gt;,
+    source_host: <a class="enum" href="https://docs.rs/url/2.5.9/url/host/enum.Host.html" title="enum url::host::Host">Host</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.99.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
+    trusted_origins: impl <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/iter/traits/collect/trait.IntoIterator.html" title="trait core::iter::traits::collect::IntoIterator">IntoIterator</a>&lt;Item = <a class="enum" href="https://docs.rs/url/2.5.9/url/origin/enum.Origin.html" title="enum url::origin::Origin">Origin</a>&gt;,
 ) -&gt; Self</h4></section></summary><div class="docblock"><p>Reuse <code>source_host</code>’s OAuth or bearer credential for <code>trusted_origins</code>,
 without wildcard fallback. Refresh updates the source credential.</p>
 <p>Calls add mappings; repeated origins replace their source. Empty input
