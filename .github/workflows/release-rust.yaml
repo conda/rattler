@@ -119,6 +119,7 @@ jobs:
           gh pr checkout "$(jq -r .number <<<"$PR")"
           cargo update --manifest-path py-rattler/Cargo.toml --workspace
           cargo update --manifest-path js-rattler/Cargo.toml --workspace
-          git add py-rattler/Cargo.lock js-rattler/Cargo.lock
+          cargo update --manifest-path c-rattler/Cargo.toml --workspace
+          git add py-rattler/Cargo.lock js-rattler/Cargo.lock c-rattler/Cargo.lock
           git diff --cached --quiet || git commit -m "chore: update bindings lockfiles"
           git push

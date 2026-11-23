@@ -1,0 +1,32 @@
+[workspace]
+name = "c-rattler"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+license = "BSD-3-Clause"
+exclude-newer = "7d"
+
+[dependencies]
+rust = "~=1.98.1"
+rust-src = "~=1.98.1"
+cargo-c = ">=0.10,<0.11"
+
+[target.unix.dependencies]
+c-compiler = "*"
+pkg-config = "*"
+
+[tasks]
+build = "cargo cbuild --release"
+install = "cargo cinstall --release --prefix=$PIXI_PROJECT_ROOT/target/capi-prefix --libdir=lib"
+test-rust = "cargo test"
+test = { depends-on = ["test-rust"] }
+generate-header = { cmd = "cargo test --test header", env = { RATTLER_UPDATE_HEADER = "1" } }
+fmt = "cargo fmt --all"
+fmt-check = "cargo fmt --all --check"
+lint = "cargo clippy --all-targets --all-features -- -D warnings"
+
+[target.unix.tasks]
+# Compiles a C program against the installed library and runs it.
+test-c = { cmd = "cc tests/c/test_api.c $(pkg-config --cflags --libs rattler) -Wl,-rpath,$PIXI_PROJECT_ROOT/target/capi-prefix/lib -o target/test_api && ./target/test_api", env = { PKG_CONFIG_PATH = "$PIXI_PROJECT_ROOT/target/capi-prefix/lib/pkgconfig" }, depends-on = [
+  "install",
+] }
+test = { depends-on = ["test-rust", "test-c"] }
