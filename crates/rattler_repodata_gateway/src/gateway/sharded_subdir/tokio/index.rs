@@ -1,6 +1,6 @@
 use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 
-use super::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedRepodata};
+use super::{REPODATA_SHARDS_FILENAME, ShardedRepodata, shard_index_cache_path};
 use crate::{
     GatewayError, Reporter,
     fetch::CacheAction,
@@ -9,7 +9,6 @@ use crate::{
         sharded_subdir::{decode_zst_bytes_async, is_missing_sharded_repodata_status},
     },
     reporter::{DownloadProgressGuard, ResponseReporterExt},
-    utils::url_to_cache_filename,
 };
 use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
@@ -124,12 +123,7 @@ pub async fn fetch_index(
         .join(REPODATA_SHARDS_FILENAME)
         .expect("invalid shard base url");
 
-    let cache_file_name = format!(
-        "{}{}",
-        url_to_cache_filename(&canonical_shards_url),
-        SHARDS_CACHE_SUFFIX
-    );
-    let cache_path = cache_dir.join(cache_file_name);
+    let cache_path = shard_index_cache_path(cache_dir, &canonical_shards_url);
 
     // Make sure the cache directory exists
     if let Some(parent) = cache_path.parent() {

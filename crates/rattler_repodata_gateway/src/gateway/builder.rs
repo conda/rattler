@@ -107,6 +107,9 @@ impl GatewayBuilder {
     }
 
     /// Set the directory to use for caching repodata.
+    ///
+    /// Defaults to the `repodata` subdirectory of
+    /// [`rattler_cache::default_cache_dir`].
     #[cfg(not(target_arch = "wasm32"))]
     #[must_use]
     pub fn with_cache_dir(mut self, cache: impl Into<std::path::PathBuf>) -> Self {
@@ -215,17 +218,21 @@ impl GatewayBuilder {
             })
         });
 
+        // By default, use the same layout as other rattler-based tools: repodata
+        // is cached in `<cache root>/repodata` and packages in `<cache root>/pkgs`.
         #[cfg(not(target_arch = "wasm32"))]
-        let cache = self.cache.unwrap_or_else(|| {
-            dirs::cache_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("rattler/cache")
-        });
+        let (cache, package_cache_root) = if let Some(cache) = self.cache {
+            (cache.clone(), cache)
+        } else {
+            let root = rattler_cache::default_cache_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from(".").join("rattler/cache"));
+            (root.join(rattler_cache::REPODATA_CACHE_DIR), root)
+        };
 
         #[cfg(not(target_arch = "wasm32"))]
-        let package_cache = self.package_cache.unwrap_or(PackageCache::new(
-            cache.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ));
+        let package_cache = self.package_cache.unwrap_or_else(|| {
+            PackageCache::new(package_cache_root.join(rattler_cache::PACKAGE_CACHE_DIR))
+        });
 
         let concurrent_requests_semaphore = match self.max_concurrent_requests {
             MaxConcurrency::Unlimited => None,
