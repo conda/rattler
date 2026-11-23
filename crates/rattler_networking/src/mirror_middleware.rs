@@ -149,7 +149,11 @@ impl Middleware for MirrorMiddleware {
 
         for (key, url) in self.keys() {
             if let Some(url_rest) = url_str.strip_prefix(key) {
-                let url_rest = url_rest.trim_start_matches('/');
+                let path_rest = url_rest
+                    .split_once(['?', '#'])
+                    .map_or(url_rest, |(path, _)| path)
+                    .trim_start_matches('/');
+
                 // replace the key with the mirror
                 let mirrors = self.mirror_map.get(url).unwrap();
                 let selected_mirror = select_mirror(mirrors);
@@ -162,22 +166,30 @@ impl Middleware for MirrorMiddleware {
                 let selected_url = {
                     let mut u = mirror.url.clone();
                     let base_path = u.path().trim_end_matches('/');
-                    if url_rest.is_empty() {
+                    if path_rest.is_empty() {
                         u.set_path(&format!("{base_path}/"));
                     } else {
-                        u.set_path(&format!("{base_path}/{url_rest}"));
+                        u.set_path(&format!("{base_path}/{path_rest}"));
                     }
+                    let query = match (mirror.url.query(), req.url().query()) {
+                        (Some(mq), Some(rq)) => Some(format!("{mq}&{rq}")),
+                        (Some(mq), None) => Some(mq.to_string()),
+                        (None, Some(rq)) => Some(rq.to_string()),
+                        (None, None) => None,
+                    };
+                    u.set_query(query.as_deref());
+                    u.set_fragment(req.url().fragment().or(mirror.url.fragment()));
                     u
                 };
 
                 // Short-circuit if the mirror does not support the file type
-                if url_rest.ends_with(".json.zst") && mirror.no_zstd {
+                if path_rest.ends_with(".json.zst") && mirror.no_zstd {
                     return Ok(create_404_response(
                         &selected_url,
                         "Mirror does not support zstd",
                     ));
                 }
-                if url_rest.ends_with(".json.bz2") && mirror.no_bz2 {
+                if path_rest.ends_with(".json.bz2") && mirror.no_bz2 {
                     return Ok(create_404_response(
                         &selected_url,
                         "Mirror does not support bz2",
@@ -394,6 +406,77 @@ mod test {
         assert!(res.status().is_success(), "status: {}", res.status());
         let body = res.text().await.unwrap();
         assert_eq!(body, "Hi from counter: mirror server");
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware_query_and_fragment_preserved() {
+        async fn count_with_query(uri: http::Uri, State(state): State<String>) -> String {
+            format!("{state}: query={}", uri.query().unwrap_or(""))
+        }
+
+        let state = String::from("mirror server");
+        let router = Router::new()
+            .route("/channel/count", get(count_with_query))
+            .with_state(state);
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+
+        let mirror_url: Url = format!("http://{}:{}/channel", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let mut mirror_map = std::collections::HashMap::new();
+        mirror_map.insert(
+            "https://prefix.dev/conda-forge".parse().unwrap(),
+            vec![mirror_setting(mirror_url)],
+        );
+
+        let middleware = MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        // Request to upstream with query parameter: https://prefix.dev/conda-forge/count?token=secret123
+        // Should be rewritten to: http://127.0.0.1:PORT/channel/count?token=secret123
+        // and NOT: http://127.0.0.1:PORT/channel/count%3Ftoken=secret123
+        let res = client
+            .get("https://prefix.dev/conda-forge/count?token=secret123#hash")
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "status: {}", res.status());
+        let body = res.text().await.unwrap();
+        assert_eq!(body, "mirror server: query=token=secret123");
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware_no_zstd_short_circuit_with_query() {
+        let mirror_url: Url = "http://127.0.0.1:8080/channel".parse().unwrap();
+        let mut mirror_setting = mirror_setting(mirror_url);
+        mirror_setting.no_zstd = true;
+
+        let mut mirror_map = std::collections::HashMap::new();
+        mirror_map.insert(
+            "https://prefix.dev/conda-forge".parse().unwrap(),
+            vec![mirror_setting],
+        );
+
+        let middleware = MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        let res = client
+            .get("https://prefix.dev/conda-forge/repodata.json.zst?token=secret")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        let body = res.text().await.unwrap();
+        assert_eq!(body, "Mirror does not support zstd");
     }
 
     #[cfg(feature = "rattler_config")]
