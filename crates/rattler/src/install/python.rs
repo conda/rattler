@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use rattler_conda_types::{PackageRecord, Subdir, Version};
@@ -30,6 +30,11 @@ pub struct PythonInfo {
 pub enum PythonInfoError {
     #[error("invalid python version '{0}'")]
     InvalidVersion(String),
+
+    #[error(
+        "invalid python_site_packages_path '{0}': must be a relative path inside the prefix without '..'"
+    )]
+    InvalidSitePackagesPath(String),
 }
 
 impl PythonInfo {
@@ -65,17 +70,23 @@ impl PythonInfo {
             PathBuf::from(format!("bin/python{major}.{minor}"))
         };
 
-        // Find the location of the site packages
-        let site_packages_path = site_packages_path.map_or_else(
-            || {
-                if platform.is_windows() {
-                    PathBuf::from("Lib/site-packages")
-                } else {
-                    PathBuf::from(format!("lib/python{major}.{minor}/site-packages"))
+        // Find the location of the site packages. A custom path comes from
+        // unsigned repodata and every noarch python file is linked below it,
+        // so it must stay inside the prefix.
+        let site_packages_path = match site_packages_path {
+            Some(path) => {
+                let path_buf = PathBuf::from(path);
+                let mut components = path_buf.components().peekable();
+                if components.peek().is_none()
+                    || !components.all(|c| matches!(c, Component::Normal(_)))
+                {
+                    return Err(PythonInfoError::InvalidSitePackagesPath(path.to_string()));
                 }
-            },
-            PathBuf::from,
-        );
+                path_buf
+            }
+            None if platform.is_windows() => PathBuf::from("Lib/site-packages"),
+            None => PathBuf::from(format!("lib/python{major}.{minor}/site-packages")),
+        };
 
         // Binary directory
         let bin_dir = if platform.is_windows() {
@@ -129,5 +140,37 @@ impl PythonInfo {
     pub fn is_relink_required(&self, previous: &PythonInfo) -> bool {
         self.short_version.0 != previous.short_version.0
             || self.short_version.1 != previous.short_version.1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn site_packages_path_must_stay_inside_prefix() {
+        let version = Version::from_str("3.13.0").unwrap();
+        let info = |path| PythonInfo::from_version(&version, Some(path), Subdir::Linux64);
+
+        assert_eq!(
+            info("lib/python3.13t/site-packages")
+                .unwrap()
+                .site_packages_path,
+            PathBuf::from("lib/python3.13t/site-packages")
+        );
+        for bad in [
+            "",
+            "/tmp/site-packages",
+            "../site-packages",
+            "lib/../../site-packages",
+            "./lib/site-packages",
+        ] {
+            assert!(
+                matches!(info(bad), Err(PythonInfoError::InvalidSitePackagesPath(_))),
+                "{bad:?} should be rejected"
+            );
+        }
     }
 }
