@@ -495,6 +495,10 @@ impl PackageCacheLayer {
     ///
     /// `fetch` returns the sha256 of the archive it extracted, which is
     /// recorded for the entry, or `None` if it does not know it.
+    ///
+    /// A layer explicitly marked read-only only validates existing entries;
+    /// missing or invalid entries return [`PackageCacheLayerError::InvalidPackage`]
+    /// without calling `fetch` or writing metadata.
     pub async fn validate_or_fetch<F, Fut, E>(
         &self,
         fetch: F,
@@ -519,7 +523,7 @@ impl PackageCacheLayer {
             cache_path,
             cache_entry.last_revision,
             cache_key.sha256.as_ref(),
-            Some(fetch),
+            (!self.read_only).then_some(fetch),
             reporter,
             self.validation_mode,
         )
@@ -2363,6 +2367,48 @@ mod test {
         let _lock = cache.acquire_global_lock().await.unwrap();
         assert!(local.path().join(".cache.lock").exists());
         assert!(!shared.path().join(".cache.lock").exists());
+    }
+
+    #[tokio::test]
+    async fn test_read_only_layer_direct_validation_never_writes() {
+        let shared = tempdir().unwrap();
+        let source = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let key: CacheKey = CondaArchiveIdentifier::try_from_path(&source)
+            .unwrap()
+            .into();
+        let populated = PackageCache::new(shared.path())
+            .get_or_fetch_from_path(&source, None, None)
+            .await
+            .unwrap();
+        let metadata = cache_lock::metadata_path(populated.path());
+        std::fs::remove_file(&metadata).unwrap();
+        let layer = PackageCacheLayer::new(shared.path()).with_read_only(true);
+        let fetch = |_| async {
+            Err::<Option<rattler_digest::Sha256Hash>, _>(std::io::Error::other(
+                "read-only fetch must not run",
+            ))
+        };
+
+        let hit = layer.validate_or_fetch(fetch, &key, None).await.unwrap();
+        assert_eq!(hit.path(), populated.path());
+        assert!(!metadata.exists());
+
+        let index = populated.path().join("info/index.json");
+        std::fs::write(&index, b"invalid").unwrap();
+        assert_matches!(
+            layer.validate_or_fetch(fetch, &key, None).await,
+            Err(PackageCacheLayerError::InvalidPackage)
+        );
+        assert_eq!(std::fs::read(&index).unwrap(), b"invalid");
+        assert!(!metadata.exists());
+
+        let absent = shared.path().join("absent");
+        let layer = PackageCacheLayer::new(&absent).with_read_only(true);
+        assert_matches!(
+            layer.validate_or_fetch(fetch, &key, None).await,
+            Err(PackageCacheLayerError::InvalidPackage)
+        );
+        assert!(!absent.exists());
     }
 
     #[tokio::test]

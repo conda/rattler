@@ -4148,6 +4148,7 @@ dependencies = [
  "serde",
  "serde_ignored",
  "serde_json",
+ "serde_with",
  "thiserror 2.0.21",
  "toml",
  "toml_edit",
