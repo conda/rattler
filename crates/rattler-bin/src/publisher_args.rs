@@ -18,8 +18,8 @@ pub struct PublisherArgs {
 
     /// Required OIDC issuer for the signing certificate.
     ///
-    /// Accepts an exact issuer URL, or `github` and `gitlab` as shorthands for
-    /// the GitHub Actions and GitLab CI issuers.
+    /// Accepts an exact issuer URL, or `github`, `gitlab` and `codeberg` as
+    /// shorthands for the GitHub Actions, GitLab CI and Codeberg Actions issuers.
     #[clap(long, visible_alias = "trusted-issuer", value_name = "ISSUER")]
     issuer: Option<IssuerArg>,
 }
@@ -48,15 +48,16 @@ impl FromStr for IssuerArg {
         let issuer = match value {
             "github" => Issuer::github_actions(),
             "gitlab" => Issuer::gitlab(),
+            "codeberg" => Issuer::codeberg(),
             url => {
                 let parsed = Url::parse(url).map_err(|err| {
                     format!(
-                        "invalid issuer {url:?}: expected `github`, `gitlab`, or an issuer URL ({err})"
+                        "invalid issuer {url:?}: expected `github`, `gitlab`, `codeberg`, or an issuer URL ({err})"
                     )
                 })?;
                 if !matches!(parsed.scheme(), "http" | "https") || !parsed.has_host() {
                     return Err(format!(
-                        "invalid issuer {url:?}: expected `github`, `gitlab`, or an HTTP(S) issuer URL"
+                        "invalid issuer {url:?}: expected `github`, `gitlab`, `codeberg`, or an HTTP(S) issuer URL"
                     ));
                 }
                 Issuer::new(url)
@@ -77,6 +78,10 @@ mod tests {
             Issuer::github_actions()
         );
         assert_eq!("gitlab".parse::<IssuerArg>().unwrap().0, Issuer::gitlab());
+        assert_eq!(
+            "codeberg".parse::<IssuerArg>().unwrap().0,
+            Issuer::codeberg()
+        );
     }
 
     #[test]
