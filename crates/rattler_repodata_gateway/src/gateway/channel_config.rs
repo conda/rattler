@@ -110,55 +110,6 @@ impl ChannelConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use super::*;
-
-    #[test]
-    fn test_channel_config_prefix_matching() {
-        let mut config = ChannelConfig::default();
-        config.default.zstd_enabled = true;
-        config.default.sharded_enabled = true;
-
-        let cf_url = Url::from_str("https://conda.anaconda.org/conda-forge").unwrap();
-        let mut cf_config = SourceConfig::default();
-        cf_config.zstd_enabled = false;
-        config.per_channel.insert(cf_url, cf_config);
-
-        let root_url = Url::from_str("https://conda.anaconda.org").unwrap();
-        let mut root_config = SourceConfig::default();
-        root_config.sharded_enabled = false;
-        config.per_channel.insert(root_url, root_config);
-
-        // Exact channel match
-        let cf_channel =
-            ChannelUrl::from(Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap());
-        assert!(!config.get(&cf_channel).zstd_enabled);
-
-        // Subchannel / label match
-        let cf_label = ChannelUrl::from(
-            Url::from_str("https://conda.anaconda.org/conda-forge/label/dev/").unwrap(),
-        );
-        assert!(!config.get(&cf_label).zstd_enabled);
-
-        // Channel with matching prefix name must NOT match conda-forge (should match root instead)
-        let cf_nightly = ChannelUrl::from(
-            Url::from_str("https://conda.anaconda.org/conda-forge-nightly/").unwrap(),
-        );
-        assert!(config.get(&cf_nightly).zstd_enabled);
-        assert!(!config.get(&cf_nightly).sharded_enabled);
-
-        // Hostname prefix collision must NOT match
-        let other_domain = ChannelUrl::from(
-            Url::from_str("https://conda.anaconda.org.attacker.com/conda-forge/").unwrap(),
-        );
-        assert!(config.get(&other_domain).zstd_enabled);
-        assert!(config.get(&other_domain).sharded_enabled);
-    }
-}
-
 #[cfg(feature = "rattler_config")]
 impl From<&rattler_config::config::CommonConfig> for ChannelConfig {
     fn from(config: &rattler_config::config::CommonConfig) -> Self {
@@ -190,5 +141,63 @@ where
 {
     fn from(config: &rattler_config::config::ConfigBase<T>) -> Self {
         Self::from(&config.common)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_channel_config_prefix_matching() {
+        let mut config = ChannelConfig {
+            default: SourceConfig {
+                zstd_enabled: true,
+                sharded_enabled: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let cf_url = Url::from_str("https://conda.anaconda.org/conda-forge").unwrap();
+        let cf_config = SourceConfig {
+            zstd_enabled: false,
+            ..Default::default()
+        };
+        config.per_channel.insert(cf_url, cf_config);
+
+        let root_url = Url::from_str("https://conda.anaconda.org").unwrap();
+        let root_config = SourceConfig {
+            sharded_enabled: false,
+            ..Default::default()
+        };
+        config.per_channel.insert(root_url, root_config);
+
+        // Exact channel match
+        let cf_channel =
+            ChannelUrl::from(Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap());
+        assert!(!config.get(&cf_channel).zstd_enabled);
+
+        // Subchannel / label match
+        let cf_label = ChannelUrl::from(
+            Url::from_str("https://conda.anaconda.org/conda-forge/label/dev/").unwrap(),
+        );
+        assert!(!config.get(&cf_label).zstd_enabled);
+
+        // Channel with matching prefix name must NOT match conda-forge (should match root instead)
+        let cf_nightly = ChannelUrl::from(
+            Url::from_str("https://conda.anaconda.org/conda-forge-nightly/").unwrap(),
+        );
+        assert!(config.get(&cf_nightly).zstd_enabled);
+        assert!(!config.get(&cf_nightly).sharded_enabled);
+
+        // Hostname prefix collision must NOT match
+        let other_domain = ChannelUrl::from(
+            Url::from_str("https://conda.anaconda.org.attacker.com/conda-forge/").unwrap(),
+        );
+        assert!(config.get(&other_domain).zstd_enabled);
+        assert!(config.get(&other_domain).sharded_enabled);
     }
 }
