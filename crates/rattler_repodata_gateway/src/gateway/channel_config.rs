@@ -78,15 +78,28 @@ pub struct ChannelConfig {
     pub per_channel: HashMap<Url, SourceConfig>,
 }
 
+/// True iff `key` equals `target` or is followed by a `/` separator in
+/// `target`. Both inputs are expected to be slash-trimmed.
+fn is_prefix_match(key: &str, target: &str) -> bool {
+    if key == target {
+        return true;
+    }
+    let Some(rest) = target.strip_prefix(key) else {
+        return false;
+    };
+    rest.starts_with('/')
+}
+
 impl ChannelConfig {
     /// Returns the source configuration for the given channel. Locates the
     /// source configuration that best matches the requested channel.
     pub fn get(&self, channel: &ChannelUrl) -> &SourceConfig {
+        let channel_str = channel.as_str().trim_end_matches('/');
         self.per_channel
             .iter()
             .filter_map(|(url, config)| {
-                let key_url = url.as_str().strip_suffix('/').unwrap_or(url.as_str());
-                if channel.as_str().starts_with(key_url) {
+                let key_url = url.as_str().trim_end_matches('/');
+                if is_prefix_match(key_url, channel_str) {
                     Some((key_url.len(), config))
                 } else {
                     None
@@ -94,6 +107,55 @@ impl ChannelConfig {
             })
             .max_by_key(|(len, _)| *len)
             .map_or(&self.default, |(_, config)| config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_channel_config_prefix_matching() {
+        let mut config = ChannelConfig::default();
+        config.default.zstd_enabled = true;
+        config.default.sharded_enabled = true;
+
+        let cf_url = Url::from_str("https://conda.anaconda.org/conda-forge").unwrap();
+        let mut cf_config = SourceConfig::default();
+        cf_config.zstd_enabled = false;
+        config.per_channel.insert(cf_url, cf_config);
+
+        let root_url = Url::from_str("https://conda.anaconda.org").unwrap();
+        let mut root_config = SourceConfig::default();
+        root_config.sharded_enabled = false;
+        config.per_channel.insert(root_url, root_config);
+
+        // Exact channel match
+        let cf_channel =
+            ChannelUrl::from(Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap());
+        assert!(!config.get(&cf_channel).zstd_enabled);
+
+        // Subchannel / label match
+        let cf_label = ChannelUrl::from(
+            Url::from_str("https://conda.anaconda.org/conda-forge/label/dev/").unwrap(),
+        );
+        assert!(!config.get(&cf_label).zstd_enabled);
+
+        // Channel with matching prefix name must NOT match conda-forge (should match root instead)
+        let cf_nightly = ChannelUrl::from(
+            Url::from_str("https://conda.anaconda.org/conda-forge-nightly/").unwrap(),
+        );
+        assert!(config.get(&cf_nightly).zstd_enabled);
+        assert!(!config.get(&cf_nightly).sharded_enabled);
+
+        // Hostname prefix collision must NOT match
+        let other_domain = ChannelUrl::from(
+            Url::from_str("https://conda.anaconda.org.attacker.com/conda-forge/").unwrap(),
+        );
+        assert!(config.get(&other_domain).zstd_enabled);
+        assert!(config.get(&other_domain).sharded_enabled);
     }
 }
 
