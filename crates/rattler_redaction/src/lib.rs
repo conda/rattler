@@ -139,7 +139,7 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
 }
 
 /// Strips a URL down to what is safe to write into durable output such as
-/// canonical match specs, repodata, or lockfiles: the userinfo, a
+/// canonical match specs, repodata, or lockfiles: the userinfo, an HTTP(S)
 /// `/t/<token>/` path prefix, and the query string are dropped, as is any
 /// fragment that is not a conda artifact digest (`md5:<hex>` or
 /// `sha256:<hex>`), which is a content address rather than a secret.
@@ -168,19 +168,24 @@ pub fn strip_url_for_serialization(url: &Url) -> Url {
         let _ = url.set_password(None);
     }
 
-    // A `/t/<token>/` prefix authenticates the request; the same location is
-    // reachable without it. An empty token means the path is just `/t/`,
-    // which is a channel named `t` rather than a credential.
-    let path_without_token = url.path_segments().and_then(|mut segments| {
-        match (segments.next(), segments.next()) {
-            // The remaining segments include the empty one a trailing slash
-            // produces, so rejoining them preserves it.
-            (Some("t"), Some(token)) if !token.is_empty() => {
-                Some(format!("/{}", segments.collect::<Vec<_>>().join("/")))
+    // A `/t/<token>/` prefix authenticates an HTTP request; the same location
+    // is reachable without it. In other schemes, such as `file:` or `s3:`, it
+    // is a literal path. An empty token means the path is just `/t/`, which is
+    // a channel named `t` rather than a credential.
+    let is_http = matches!(url.scheme(), "http" | "https");
+    let path_without_token = url
+        .path_segments()
+        .filter(|_| is_http)
+        .and_then(|mut segments| {
+            match (segments.next(), segments.next()) {
+                // The remaining segments include the empty one a trailing slash
+                // produces, so rejoining them preserves it.
+                (Some("t"), Some(token)) if !token.is_empty() => {
+                    Some(format!("/{}", segments.collect::<Vec<_>>().join("/")))
+                }
+                _ => None,
             }
-            _ => None,
-        }
-    });
+        });
     if let Some(path) = path_without_token {
         url.set_path(&path);
     }
@@ -357,6 +362,15 @@ mod test {
         // `/t/` with nothing after it is a channel named `t`, not a token.
         let named_t = Url::parse("https://conda.anaconda.org/t/").unwrap();
         assert_eq!(strip_url_for_serialization(&named_t), named_t);
+
+        // Outside HTTP, `/t/` is a literal path segment.
+        for literal in [
+            "file:///t/artifacts/pkg.conda",
+            "s3://bucket/t/artifacts/pkg.conda",
+        ] {
+            let url = Url::parse(literal).unwrap();
+            assert_eq!(strip_url_for_serialization(&url), url);
+        }
 
         let digest_url = Url::parse("https://prefix.dev/pkg.conda#sha256:deadbeef").unwrap();
         assert_eq!(strip_url_for_serialization(&digest_url), digest_url);

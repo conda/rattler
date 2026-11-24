@@ -386,7 +386,8 @@ fn channel_name_for_url(url: &Url) -> Option<String> {
 fn channel_renders_by_name(channel: &Channel) -> bool {
     channel.platforms.is_none()
         && channel.name.is_some()
-        && channel_name_for_url(channel.base_url.url()) == channel.name
+        && channel_name_for_url(&strip_url_for_serialization(channel.base_url.url()))
+            == channel.name
 }
 
 /// Whether a channel name or namespace can occupy a positional slot without
@@ -428,12 +429,13 @@ fn with_platform_selector(mut value: String, channel: &Channel) -> String {
     value
 }
 
-/// Renders a channel as its base URL plus any explicit platform selector.
-/// Values are raw: only the legacy dialect renders a channel this way, and it
-/// has always shown URLs as they are. See [`canonical_channel_value`] for the
-/// dialect that removes credentials.
+/// Renders a channel as its base URL, without credentials, plus any explicit
+/// platform selector.
 fn channel_url_value(channel: &Channel) -> String {
-    with_platform_selector(channel.base_url.url().to_string(), channel)
+    with_platform_selector(
+        strip_url_for_serialization(channel.base_url.url()).to_string(),
+        channel,
+    )
 }
 
 /// A borrowed, name-optional view over the fields shared by [`MatchSpec`] and
@@ -821,13 +823,9 @@ impl SpecView<'_> {
             }
             Field::Url => {
                 let url = self.url.expect("presence checked by caller");
-                match ctx.style {
-                    DisplayStyle::Legacy => write_scalar(f, ctx, "url", url),
-                    // The canonical dialect never serializes credentials.
-                    DisplayStyle::Canonical => {
-                        write_scalar(f, ctx, "url", &strip_url_for_serialization(url))
-                    }
-                }
+                // Rendered specs end up in files such as conda-meta records,
+                // so neither dialect writes credentials.
+                write_scalar(f, ctx, "url", &strip_url_for_serialization(url))
             }
             Field::License => {
                 let license = self.license.expect("presence checked by caller");

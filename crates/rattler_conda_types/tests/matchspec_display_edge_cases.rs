@@ -59,15 +59,24 @@ fn one_line(text: &str) -> String {
 
 /// What a reparse of the legacy rendering did. The legacy dialect is allowed
 /// to render something the parser refuses, but it must never come back as a
-/// different query. A reparse that renders to the very same text is the one
-/// tolerated difference: the text carries everything it can, and the parser
-/// reads it the only way it knows (`Exact("py*")` reads back as a glob, a
-/// track feature holding a space reads back as two).
+/// different query, other than without credentials. A reparse that renders to
+/// the very same text is the other tolerated difference: the text carries
+/// everything it can, and the parser reads it the only way it knows
+/// (`Exact("py*")` reads back as a glob, a track feature holding a space reads
+/// back as two).
 fn legacy_outcome(spec: &MatchSpec, rendered: &str) -> String {
     match MatchSpec::from_str(rendered, options()) {
         Ok(reparsed) if reparsed == *spec => "same spec".to_string(),
         Ok(reparsed) if reparsed.to_string() == rendered => {
             "differs, renders identically".to_string()
+        }
+        // Credentials are never rendered, so the reparse lacks them; the
+        // canonical forms, which drop credentials too, still agree.
+        Ok(reparsed)
+            if spec.to_canonical_string().is_ok()
+                && reparsed.to_canonical_string().ok() == spec.to_canonical_string().ok() =>
+        {
+            "same spec without credentials".to_string()
         }
         Ok(reparsed) => format!("DIVERGES: {reparsed}"),
         Err(error) => format!("rejected: {}", one_line(&error.to_string())),
@@ -314,8 +323,8 @@ fn channels() {
         ),
     );
 
-    // Legacy renders URLs as they are; canonical strips credentials, which is
-    // the one case where a canonical round-trip does not return an equal spec.
+    // Neither dialect renders credentials, which is the one case where a
+    // round-trip does not return an equal spec.
     let secret = Url::parse(
         "https://user:password@prefix.dev/t/path-token/channel/pkg.conda?auth=session#ticket=fragment-token",
     )

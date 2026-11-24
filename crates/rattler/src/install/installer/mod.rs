@@ -1598,6 +1598,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_requested_specs_do_not_persist_credentials() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        let options = rattler_conda_types::ParseMatchSpecOptions::strict().with_conditionals(true);
+        let requested_specs = [
+            "https://user:password@example.com/t/channel-token/private::empty",
+            "empty[url='https://example.com/t/url-token/empty-0.1.0.conda?sig=signature#sha256:abc123']",
+            "empty[when='python[channel=\"https://user:password@example.com/conditional\"]']",
+            "empty[url='file:///t/artifacts/empty-0.1.0.conda']",
+            "empty[url='s3://bucket/t/artifacts/empty-0.1.0.conda']",
+        ]
+        .into_iter()
+        .map(|spec| MatchSpec::from_str(spec, options).unwrap())
+        .collect();
+
+        let installer = Installer::new().with_requested_specs(requested_specs);
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let record = read_prefix_record(&get_meta_file_path(&target_prefix, &repo_record));
+        insta::assert_yaml_snapshot!(record.requested_specs, @r#"
+        - "empty[channel=\"https://example.com/private/\"]"
+        - "empty[url=\"https://example.com/empty-0.1.0.conda#sha256:abc123\"]"
+        - "empty[when=\"python[channel=\\\"https://example.com/conditional/\\\"]\"]"
+        - "empty[url=\"file:///t/artifacts/empty-0.1.0.conda\"]"
+        - "empty[url=\"s3://bucket/t/artifacts/empty-0.1.0.conda\"]"
+        "#);
+    }
+
+    #[tokio::test]
     async fn test_install_without_requested_specs_e2e() {
         let (_temp_dir, target_prefix) = create_test_environment();
         let repo_record = create_dummy_repo_record();

@@ -27,20 +27,20 @@ canonical : foo[channel="conda-forge[noarch]"]
   reparse : same spec, stable
 
 case      : https://prefix.dev/t/path-token/conda-forge::foo
-legacy    : foo[channel="https://prefix.dev/t/path-token/conda-forge/"]
-  reparse : same spec
+legacy    : foo[channel="https://prefix.dev/conda-forge/"]
+  reparse : differs, renders identically
 canonical : foo[channel="https://prefix.dev/conda-forge/"]
   reparse : differs from input, stable
 
 case      : foo[channel="https://user:secret@prefix.dev/t/path-token/conda-forge"]
-legacy    : foo[channel="https://user:secret@prefix.dev/t/path-token/conda-forge/"]
-  reparse : same spec
+legacy    : foo[channel="https://prefix.dev/conda-forge/"]
+  reparse : differs, renders identically
 canonical : foo[channel="https://prefix.dev/conda-forge/"]
   reparse : differs from input, stable
 
 case      : https://conda.anaconda.org/t/path-token/conda-forge::foo
-legacy    : t/path-token/conda-forge::foo
-  reparse : same spec
+legacy    : foo[channel="https://conda.anaconda.org/conda-forge/"]
+  reparse : same spec without credentials
 canonical : foo[channel="conda-forge"]
   reparse : differs from input, stable
 
@@ -68,8 +68,8 @@ legacy    : foo[unrepresentable-channel="https://repo.example/custom/[]"]
 canonical : refused: an explicit empty channel-platform selector cannot be represented canonically
 
 case      : channel and url carrying credentials
-legacy    : foo[url="https://user:password@prefix.dev/t/path-token/channel/pkg.conda?auth=session#ticket=fragment-token", channel="https://user:password@prefix.dev/t/path-token/channel/pkg.conda/?auth=session#ticket=fragment-token"]
-  reparse : same spec
+legacy    : foo[url="https://prefix.dev/channel/pkg.conda", channel="https://prefix.dev/channel/pkg.conda/"]
+  reparse : differs, renders identically
 canonical : foo[channel="https://prefix.dev/channel/pkg.conda/",url="https://prefix.dev/channel/pkg.conda"]
   reparse : differs from input, stable
 
