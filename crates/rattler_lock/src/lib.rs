@@ -1474,6 +1474,48 @@ packages:
     /// Verify that a source package with partial metadata (no version/subdir)
     /// round-trips correctly: `record()` returns `None`, the name is preserved,
     /// and re-serializing + re-parsing produces identical output.
+    /// The multichannel of a channel survives a roundtrip, and channels
+    /// without one are written without the key.
+    #[test]
+    fn test_multichannel_roundtrip() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+      - url: https://repo.anaconda.com/pkgs/main/
+        multichannel: defaults
+      - url: https://repo.anaconda.com/pkgs/r/
+        multichannel: defaults
+    packages:
+      linux-64: []
+packages: []
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let environment = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+        let channels = environment.channels();
+        let multichannels: Vec<_> = channels
+            .iter()
+            .map(|channel| channel.multichannel.as_deref())
+            .collect();
+        assert_eq!(multichannels, [None, Some("defaults"), Some("defaults")]);
+
+        let rendered = lock_file.render_to_string().unwrap();
+        assert_eq!(rendered.matches("multichannel: defaults").count(), 2);
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        assert_eq!(
+            reparsed
+                .environment(DEFAULT_ENVIRONMENT_NAME)
+                .unwrap()
+                .channels(),
+            channels
+        );
+        similar_asserts::assert_eq!(rendered, reparsed.render_to_string().unwrap());
+    }
+
     #[test]
     fn test_partial_metadata_roundtrip() {
         let lock_file_str = "\

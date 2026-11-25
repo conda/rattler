@@ -24,6 +24,7 @@ expression: "(unused, normalized(config))"
                 System,
             ),
             mirrors: {},
+            multichannels: {},
             build: BuildConfig {
                 package_format: None,
             },

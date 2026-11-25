@@ -172,6 +172,7 @@ fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, 
                 .map(|channel| crate::Channel {
                     url: channel.url.clone(),
                     used_env_vars: channel.used_env_vars.clone(),
+                    multichannel: None,
                 }),
         );
         let mut selected = BTreeMap::<EnvironmentSlot<'_>, (LockedPackage, usize)>::new();

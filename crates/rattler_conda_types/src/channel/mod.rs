@@ -16,8 +16,13 @@ use super::{ParseSubdirError, Subdir};
 use crate::utils::{path::is_path, url::parse_scheme};
 
 mod channel_url;
+mod multi_channel;
 
 pub use channel_url::ChannelUrl;
+pub use multi_channel::{
+    ChannelOrMultiChannel, ChannelSpecifier, MultiChannel, MultiChannelError, MultiChannels,
+    ParseChannelSpecifierError, is_valid_multi_channel_name, validate_multi_channel,
+};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 

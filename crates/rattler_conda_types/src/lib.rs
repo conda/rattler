@@ -40,7 +40,11 @@ mod record_traits;
 use std::path::{Path, PathBuf};
 
 pub use build_spec::{BuildNumber, BuildNumberSpec, OrdOperator, ParseBuildNumberSpecError};
-pub use channel::{Channel, ChannelConfig, ChannelUrl, NamedChannelOrUrl, ParseChannelError};
+pub use channel::{
+    Channel, ChannelConfig, ChannelOrMultiChannel, ChannelSpecifier, ChannelUrl, MultiChannel,
+    MultiChannelError, MultiChannels, NamedChannelOrUrl, ParseChannelError,
+    ParseChannelSpecifierError, is_valid_multi_channel_name, validate_multi_channel,
+};
 pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use channel_notice::{ChannelNotice, ChannelNoticeLevel, ChannelNotices};
 pub use environment_yaml::{EnvironmentYaml, MatchSpecOrSubSection};

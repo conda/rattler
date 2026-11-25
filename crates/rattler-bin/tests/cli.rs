@@ -205,6 +205,46 @@ fn test_solve_multichannel() {
     insta::assert_snapshot!(urls);
 }
 
+/// A multichannel defined in the `multichannels` table of the configuration
+/// can be requested by its name and solves like the same multichannel given
+/// inline.
+#[test]
+fn test_solve_multichannel_from_config() {
+    let home = tempfile::tempdir().expect("failed to create a temporary directory");
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[multichannels]\ngrp = [\"./test-data/channels/multichannel-a\", \"./test-data/channels/multichannel-b\"]\n",
+    )
+    .expect("failed to write the configuration");
+    let home = home.path().to_str().expect("the path is utf-8");
+
+    let solve = |channel: &str| {
+        run_rattler_with_env(
+            &[
+                "solve",
+                "pkg",
+                "--platform",
+                "linux-64",
+                "--virtual-package",
+                "__unix",
+                "--channel-priority",
+                "strict",
+                "-c",
+                channel,
+                "-c",
+                "./test-data/channels/multichannel-c",
+                "--format",
+                "urls",
+            ],
+            &[("RATTLER_HOME", home)],
+        )
+    };
+    let inline =
+        solve("grp=./test-data/channels/multichannel-a,./test-data/channels/multichannel-b");
+    assert_eq!(solve("grp"), inline);
+    assert!(inline.contains("multichannel-b"), "got:\n{inline}");
+}
+
 /// The skill embeds the crate version, which is replaced so the snapshot does
 /// not change on every release.
 ///

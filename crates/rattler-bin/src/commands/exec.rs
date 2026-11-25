@@ -7,13 +7,13 @@ use rattler::{
 };
 use rattler_cache::EXEC_ENVS_DIR;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
+    ChannelConfig, ChannelOrMultiChannel, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Subdir,
 };
 use rattler_config::{ConfigBase, NoExtension};
 use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile, PlatformData, PlatformName};
 use rattler_networking::LazyClient;
-use rattler_repodata_gateway::RepoData;
+use rattler_repodata_gateway::{RepoData, Source};
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
 use rattler_vfs::{
@@ -31,12 +31,13 @@ use std::{
 use crate::{
     commands::{
         client::create_client_with_middleware,
-        gateway::{build_gateway, load_config, resolve_channels},
+        gateway::{build_gateway, load_config, resolve_channels_or_multi_channels},
         hyperlink,
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
     global_multi_progress,
+    solver_args::task_for_repodata,
 };
 
 /// Run a command and install it in a temporary environment.
@@ -114,7 +115,8 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     })?;
 
     let config = load_config()?;
-    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
+    let channels =
+        resolve_channels_or_multi_channels(opt.channels.as_deref(), &config, &channel_config)?;
 
     // Determine the specs for installation and for the environment name.
     let explicit_specs = parse_specs(&opt.specs)?;
@@ -214,7 +216,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
 
 struct CreateExecPrefixOptions<'a> {
     specs: &'a [MatchSpec],
-    channels: &'a [Channel],
+    channels: &'a [ChannelOrMultiChannel],
     config: &'a ConfigBase<NoExtension>,
     platform: Subdir,
     dir_prefix: Option<String>,
@@ -248,7 +250,21 @@ async fn create_exec_prefix(
         offline,
         dematerialized,
     } = options;
-    let channel_urls: Vec<String> = channels.iter().map(|c| c.base_url.to_string()).collect();
+    // A channel of a multichannel solves differently than the same channel on
+    // its own, so the name of the multichannel is part of the hash.
+    let channel_urls: Vec<String> = channels
+        .iter()
+        .flat_map(|channel| {
+            let prefix = channel
+                .multi_channel_name()
+                .map(|name| format!("{name}="))
+                .unwrap_or_default();
+            channel
+                .channels()
+                .iter()
+                .map(move |c| format!("{prefix}{}", c.base_url))
+        })
+        .collect();
     let env_hash = compute_env_hash(specs, &channel_urls, platform);
 
     let mut dir_name = match dir_prefix {
@@ -392,7 +408,7 @@ async fn create_exec_prefix(
 /// the caller can reuse it to fetch packages.
 async fn solve_environment(
     specs: &[MatchSpec],
-    channels: &[Channel],
+    channels: &[ChannelOrMultiChannel],
     config: &ConfigBase<NoExtension>,
     platform: Subdir,
     list: Option<&str>,
@@ -404,15 +420,17 @@ async fn solve_environment(
     let download_client = create_client_with_middleware(offline)?;
 
     let gateway = build_gateway(download_client.clone(), config, offline, true)?;
+    let sources = channels
+        .iter()
+        .cloned()
+        .map(Source::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .into_diagnostic()?;
 
     let repo_data = wrap_in_async_progress(
         "fetching repodata",
         gateway
-            .query(
-                channels.to_vec(),
-                [platform, Subdir::NoArch],
-                specs.to_vec(),
-            )
+            .query(sources, [platform, Subdir::NoArch], specs.to_vec())
             .recursive(true),
     )
     .await
@@ -441,7 +459,7 @@ async fn solve_environment(
     let solver_task = SolverTask {
         specs: specs.to_vec(),
         virtual_packages,
-        ..SolverTask::from_iter(&repo_data)
+        ..task_for_repodata(&repo_data.repodata)
     };
 
     let solved = wrap_in_progress("solving environment", || Solver.solve(solver_task))

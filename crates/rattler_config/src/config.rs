@@ -15,7 +15,10 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use rattler_conda_types::{ChannelConfig, NamedChannelOrUrl};
+use rattler_conda_types::{
+    ChannelConfig, ChannelOrMultiChannel, ChannelSpecifier, MultiChannelError, MultiChannels,
+    NamedChannelOrUrl, validate_multi_channel,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use url::Url;
@@ -180,6 +183,22 @@ pub struct CommonConfig {
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
     pub mirrors: IndexMap<Url, Vec<Url>>,
 
+    /// Named groups of channels that are requested as a whole, like the
+    /// `defaults` channel of conda. A channel name that matches one of these
+    /// refers to all of its channels, which share a single channel priority
+    /// tier when solving.
+    ///
+    /// ```toml
+    /// [multichannels]
+    /// defaults = ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"]
+    /// ```
+    ///
+    /// When several configuration files define a multichannel with the same
+    /// name, the definition of the later file replaces the earlier one.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub multichannels: MultiChannels,
+
     #[serde(default, skip_serializing_if = "BuildConfig::is_default")]
     pub build: BuildConfig,
 
@@ -265,6 +284,7 @@ impl Default for CommonConfig {
             tls_no_verify: None,
             tls_root_certs: None,
             mirrors: IndexMap::new(),
+            multichannels: MultiChannels::new(),
             build: BuildConfig::default(),
             channel_config: default_channel_config(),
             repodata_config: RepodataConfig::default(),
@@ -278,6 +298,24 @@ impl Default for CommonConfig {
             allow_ref_links: None,
             virtual_package_detectors: VirtualPackageDetectorsConfig::default(),
         }
+    }
+}
+
+impl CommonConfig {
+    /// Resolves a channel against the [`multichannels`](Self::multichannels)
+    /// of this configuration and its [`channel_config`](Self::channel_config).
+    ///
+    /// A channel name that matches a multichannel resolves to that
+    /// multichannel, any other channel to a single channel. An inline
+    /// multichannel (`NAME=CHANNEL,CHANNEL,...`) takes precedence over a
+    /// definition with the same name.
+    pub fn resolve_channel(
+        &self,
+        channel: impl Into<ChannelSpecifier>,
+    ) -> Result<ChannelOrMultiChannel, MultiChannelError> {
+        channel
+            .into()
+            .resolve(&self.multichannels, &self.channel_config)
     }
 }
 
@@ -344,6 +382,12 @@ impl Config for CommonConfig {
                 .chain(other.mirrors.iter())
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
+            multichannels: self
+                .multichannels
+                .iter()
+                .chain(other.multichannels.iter())
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
             build: self.build.merge_config(&other.build)?,
             // Currently this is always the default so it doesn't matter which one we take.
             channel_config: self.channel_config,
@@ -371,6 +415,11 @@ impl Config for CommonConfig {
                 ValidationError::InvalidValue("exclude-newer".to_string(), err.to_string())
             })?;
         }
+        for (name, channels) in &self.multichannels {
+            validate_multi_channel(name, channels, &self.multichannels).map_err(|err| {
+                ValidationError::InvalidValue(format!("multichannels.{name}"), err.to_string())
+            })?;
+        }
         self.build.validate()?;
         self.repodata_config.validate()?;
         self.concurrency.validate()?;
@@ -389,6 +438,7 @@ impl Config for CommonConfig {
             "tls-no-verify".to_string(),
             "tls-root-certs".to_string(),
             "mirrors".to_string(),
+            "multichannels".to_string(),
             "run-post-link-scripts".to_string(),
             "allow-symbolic-links".to_string(),
             "allow-hard-links".to_string(),
