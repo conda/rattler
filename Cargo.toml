@@ -186,7 +186,7 @@ sigstore-verify = { version = "0.15.1", default-features = false, features = [
   "aws-lc-rs",
   "tuf",
 ] }
-sigstore-trust-root = { version = "0.15.1", default-features = false, features = [
+sigstore-trust-root = { version = "0.16.0", default-features = false, features = [
   "aws-lc-rs",
   "tuf",
 ] }
