@@ -10,7 +10,6 @@
 use futures::StreamExt;
 use rattler_conda_types::RepoDataRecord;
 use rattler_digest::{Sha256, Sha256Hash};
-use rattler_redaction::Redact;
 use reqwest_middleware::ClientWithMiddleware;
 use sigstore_types::Bundle;
 use tokio::io::AsyncReadExt;
@@ -193,6 +192,10 @@ async fn fetch_bounded(
         return fetch_bounded_file(url, max_size).await;
     }
 
+    // The error messages name the redacted sidecar URL, so the URL is
+    // stripped from reqwest errors rather than redacted: a middleware may have
+    // rewritten the request URL into one carrying a secret that redaction does
+    // not recognize, such as an S3 presigned URL.
     let response =
         client
             .get(url.clone())
@@ -200,7 +203,7 @@ async fn fetch_bounded(
             .await
             .map_err(|source| SigstoreError::FetchSidecar {
                 url: url.clone(),
-                source: source.redact(),
+                source: source.without_url(),
             })?;
 
     let status = response.status();
@@ -223,7 +226,7 @@ async fn fetch_bounded(
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|source| SigstoreError::ReadSidecar {
             url: url.clone(),
-            source: source.redact(),
+            source: source.without_url(),
         })?;
         if (bytes.len() + chunk.len()) as u64 > max_size {
             return Err(SigstoreError::SidecarTooLarge {
