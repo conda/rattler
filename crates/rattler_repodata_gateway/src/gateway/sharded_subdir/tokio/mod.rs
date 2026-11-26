@@ -351,7 +351,7 @@ async fn write_shard_to_cache(
         let shard_cache_parent_path = shard_cache_path
             .parent()
             .expect("file path must have a parent");
-        let mut temp_file = tempfile::Builder::new()
+        let mut temp_file = rattler_conda_types::utils::shared_tempfile_builder()
             .tempfile_in(
                 shard_cache_path
                     .parent()

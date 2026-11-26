@@ -319,7 +319,7 @@ impl ResultCache {
         let bytes = serde_json::to_vec_pretty(&entry)?;
         // Written next to the entry and renamed into place, so a reader never
         // sees a partial file.
-        let (file, temporary) = tempfile::NamedTempFile::new_in(&self.root)
+        let (file, temporary) = rattler_conda_types::utils::shared_tempfile_in(&self.root)
             .map_err(io_error)?
             .into_parts();
         let mut file = tokio::fs::File::from_std(file);
@@ -510,6 +510,16 @@ mod tests {
         let written = cache.read(&key, &clock(1_000), &env()).await.unwrap();
         assert_eq!(written.stderr.as_deref(), Some("hardware probe warning\n"));
         assert_eq!(written.expires_at, 1_100);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |path: &std::path::Path| {
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+            };
+            let reference = dir.path().join("reference");
+            std::fs::File::create(&reference).unwrap();
+            assert_eq!(mode(&cache.path_for(&key)), mode(&reference));
+        }
 
         assert_eq!(
             cache.read(&key, &clock(1_050), &env()).await,

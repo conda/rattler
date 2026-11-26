@@ -12,7 +12,6 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
-use tempfile::NamedTempFile;
 
 use crate::utils::serde::is_none_or_empty_string;
 use crate::{
@@ -302,13 +301,16 @@ impl PrefixRecord {
         })?;
 
         // Use a temporary file in the same directory for atomic writes
-        let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
-            std::io::Error::other(format!(
-                "Failed to create temporary file in '{}': {}",
-                parent.display(),
-                e
-            ))
-        })?;
+        let temp_file = crate::utils::shared_tempfile_builder()
+            .prefix("prefix_record_")
+            .tempfile_in(parent)
+            .map_err(|e| {
+                std::io::Error::other(format!(
+                    "Failed to create temporary file in '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
 
         // Write to temp file with buffered writer
         let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
@@ -527,6 +529,32 @@ mod test {
         let path = get_test_data_dir().join("conda-meta").join(path_name);
         let prefix_record = super::PrefixRecord::from_path(path).unwrap();
         insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);
+    }
+
+    /// Prefix records must respect the umask like a plain `File::create`, so
+    /// other users can read the records of a shared environment.
+    #[cfg(unix)]
+    #[test]
+    fn write_to_path_respects_umask() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mode =
+            |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+
+        let record = super::PrefixRecord::from_path(
+            get_test_data_dir()
+                .join("conda-meta")
+                .join("pip-23.0-pyhd8ed1ab_0.json"),
+        )
+        .unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let reference = dir.path().join("reference");
+        std::fs::File::create(&reference).unwrap();
+        let target = dir.path().join(record.file_name());
+        record.write_to_path(&target, false).unwrap();
+
+        assert_eq!(mode(&target), mode(&reference));
     }
 
     #[test]
