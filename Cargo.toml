@@ -181,7 +181,7 @@ smallvec = { version = "1", features = [
 sigstore-sign = { version = "0.15.1", default-features = false, features = [
   "aws-lc-rs",
 ] }
-sigstore-types = "0.15.1"
+sigstore-types = "0.16.0"
 sigstore-verify = { version = "0.15.1", default-features = false, features = [
   "aws-lc-rs",
   "tuf",
