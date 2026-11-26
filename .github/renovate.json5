@@ -63,6 +63,12 @@
       groupName: "pyo3",
     },
     {
+      description: "The sigstore-* crates are released in lockstep and depend on each other at matching versions, so updating one alone breaks the build. Update them together.",
+      matchManagers: ["cargo"],
+      matchPackageNames: ["sigstore-*"],
+      groupName: "sigstore",
+    },
+    {
       description: "Every pyo3-dependent crate needs the same pyo3 series, and pythonize is usually the last to support a new one. pyo3 and pyo3-async-runtimes follow pythonize releases (see customManagers). pyo3-file uses its own numbering, so it cannot follow pythonize; bump it by hand in the pyo3 group PR. Patch updates within the current series still go through.",
       matchManagers: ["cargo"],
       matchPackageNames: ["pyo3", "pyo3-async-runtimes", "pyo3-file"],
