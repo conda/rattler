@@ -158,6 +158,10 @@ expression: "(unused, normalized(config))"
                 timeout_seconds: None,
                 consent: {},
             },
+            package_cache: PackageCacheConfig {
+                validation: None,
+                layers: [],
+            },
         },
         extensions: NoExtension,
         loaded_from: [],

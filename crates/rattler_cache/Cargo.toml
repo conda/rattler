@@ -13,6 +13,7 @@ readme.workspace = true
 default = ["rustls"]
 rustls = ["reqwest/rustls", "reqwest-middleware/rustls", "rattler_networking/rustls", "rattler_package_streaming/rustls"]
 native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
+rattler_config = ["dep:rattler_config"]
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
@@ -27,6 +28,7 @@ fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 itertools = { workspace = true }
 parking_lot = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_config = { workspace = true, optional = true }
 rattler_digest = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false }
@@ -42,6 +44,9 @@ hex = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dev-dependencies]
 assert_matches = { workspace = true }

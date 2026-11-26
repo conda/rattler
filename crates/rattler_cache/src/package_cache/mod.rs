@@ -40,6 +40,8 @@ use crate::validation::{ValidationMode, validate_package_directory_lazily};
 
 mod cache_key;
 mod cache_lock;
+#[cfg(feature = "rattler_config")]
+mod config;
 mod reporter;
 
 #[derive(Clone)]
@@ -77,6 +79,7 @@ pub struct PackageCacheLayer {
     packages: Arc<DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>>,
     validation_mode: ValidationMode,
     filter: PackageCacheLayerFilter,
+    read_only: bool,
 }
 
 /// Controls which packages may be read from or written to a package-cache layer.
@@ -364,7 +367,15 @@ impl PackageCacheLayer {
             packages: Arc::new(DashMap::default()),
             validation_mode: ValidationMode::default(),
             filter: PackageCacheLayerFilter::default(),
+            read_only: false,
         }
+    }
+
+    /// Marks this layer as read-only: packages are read from it but never
+    /// written to it, even when the filesystem permits writing.
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     /// Sets the validation mode used by this layer.
@@ -410,11 +421,15 @@ impl PackageCacheLayer {
         self.filter.accepts(cache_key)
     }
 
-    /// Determine if the layer is read-only in the filesystem
+    /// Determine if the layer is read-only, either because it was marked
+    /// read-only with [`Self::with_read_only`] or because the filesystem does
+    /// not permit writing to it.
     pub fn is_readonly(&self) -> bool {
-        self.path
-            .metadata()
-            .is_ok_and(|m| m.permissions().readonly())
+        self.read_only
+            || self
+                .path
+                .metadata()
+                .is_ok_and(|m| m.permissions().readonly())
             || is_mounted_readonly(&self.path)
     }
 
@@ -480,6 +495,10 @@ impl PackageCacheLayer {
     ///
     /// `fetch` returns the sha256 of the archive it extracted, which is
     /// recorded for the entry, or `None` if it does not know it.
+    ///
+    /// A layer explicitly marked read-only only validates existing entries;
+    /// missing or invalid entries return [`PackageCacheLayerError::InvalidPackage`]
+    /// without calling `fetch` or writing metadata.
     pub async fn validate_or_fetch<F, Fut, E>(
         &self,
         fetch: F,
@@ -504,7 +523,7 @@ impl PackageCacheLayer {
             cache_path,
             cache_entry.last_revision,
             cache_key.sha256.as_ref(),
-            Some(fetch),
+            (!self.read_only).then_some(fetch),
             reporter,
             self.validation_mode,
         )
@@ -2313,6 +2332,90 @@ mod test {
             .await
             .unwrap();
         assert!(metadata.path().starts_with(first.path()));
+    }
+
+    #[tokio::test]
+    async fn test_layer_marked_read_only_is_read_but_never_written() {
+        let shared = tempdir().unwrap();
+        let local = tempdir().unwrap();
+        let cached = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let missing = get_test_data_dir().join("clobber/clobber-pypy-0.1.0-h4616a5c_0.conda");
+        PackageCache::new(shared.path())
+            .get_or_fetch_from_path(&cached, None, None)
+            .await
+            .unwrap();
+
+        // `shared` is writable on disk; only the flag keeps writes out of it.
+        let cache = PackageCache::from_layers(
+            [
+                PackageCacheLayer::new(shared.path()).with_read_only(true),
+                PackageCacheLayer::new(local.path()),
+            ],
+            false,
+        );
+
+        let hit = cache
+            .get_or_fetch_from_path(&cached, None, None)
+            .await
+            .unwrap();
+        assert!(hit.path().starts_with(shared.path()));
+
+        let miss = cache
+            .get_or_fetch_from_path(&missing, None, None)
+            .await
+            .unwrap();
+        assert!(miss.path().starts_with(local.path()));
+        assert!(
+            !shared
+                .path()
+                .join(miss.path().file_name().unwrap())
+                .exists()
+        );
+        let _lock = cache.acquire_global_lock().await.unwrap();
+        assert!(local.path().join(".cache.lock").exists());
+        assert!(!shared.path().join(".cache.lock").exists());
+    }
+
+    #[tokio::test]
+    async fn test_read_only_layer_direct_validation_never_writes() {
+        let shared = tempdir().unwrap();
+        let source = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let key: CacheKey = CondaArchiveIdentifier::try_from_path(&source)
+            .unwrap()
+            .into();
+        let populated = PackageCache::new(shared.path())
+            .get_or_fetch_from_path(&source, None, None)
+            .await
+            .unwrap();
+        let metadata = cache_lock::metadata_path(populated.path());
+        std::fs::remove_file(&metadata).unwrap();
+        let layer = PackageCacheLayer::new(shared.path()).with_read_only(true);
+        let fetch = |_| async {
+            Err::<Option<rattler_digest::Sha256Hash>, _>(std::io::Error::other(
+                "read-only fetch must not run",
+            ))
+        };
+
+        let hit = layer.validate_or_fetch(fetch, &key, None).await.unwrap();
+        assert_eq!(hit.path(), populated.path());
+        assert!(!metadata.exists());
+
+        let index = populated.path().join("info/index.json");
+        std::fs::write(&index, b"invalid").unwrap();
+        assert_matches!(
+            layer.validate_or_fetch(fetch, &key, None).await,
+            Err(PackageCacheLayerError::InvalidPackage)
+        );
+        assert_eq!(std::fs::read(&index).unwrap(), b"invalid");
+        assert!(!metadata.exists());
+
+        let absent = shared.path().join("absent");
+        let layer = PackageCacheLayer::new(&absent).with_read_only(true);
+        assert_matches!(
+            layer.validate_or_fetch(fetch, &key, None).await,
+            Err(PackageCacheLayerError::InvalidPackage)
+        );
+        assert!(!absent.exists());
     }
 
     #[tokio::test]
