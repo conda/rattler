@@ -31,7 +31,8 @@ pub(crate) enum DisplayStyle {
     /// The historic positional format produced by `Display`. Infallible and
     /// best-effort: layout and field order stay stable for existing callers
     /// and values are quoted losslessly when possible (a value holding both
-    /// quote characters is not). Not a serialization format; use
+    /// quote characters is not). Like the canonical dialect, it never
+    /// renders URL credentials. Not a serialization format; use
     /// [`MatchSpec::to_canonical_string`] for verified output.
     Legacy,
     /// The stable all-bracket representation produced by
@@ -380,14 +381,15 @@ fn channel_name_for_url(url: &Url) -> Option<String> {
         .then_some(name)
 }
 
-/// Whether the legacy `{name}::` prefix can carry this channel: the name has
-/// to be the one the URL resolves to, and the prefix has no room for a
+/// The name the legacy dialect writes this channel as, if any: the name its
+/// URL resolves to once credentials are stripped, so a token cannot come
+/// through as part of the name. The `{name}::` prefix has no room for a
 /// platform selector.
-fn channel_renders_by_name(channel: &Channel) -> bool {
-    channel.platforms.is_none()
-        && channel.name.is_some()
-        && channel_name_for_url(&strip_url_for_serialization(channel.base_url.url()))
-            == channel.name
+fn legacy_channel_name(channel: &Channel) -> Option<String> {
+    if channel.platforms.is_some() || channel.name.is_none() {
+        return None;
+    }
+    channel_name_for_url(&strip_url_for_serialization(channel.base_url.url()))
 }
 
 /// Whether a channel name or namespace can occupy a positional slot without
@@ -603,7 +605,7 @@ impl SpecView<'_> {
         // `{name}::` only when the name reconstructs the channel, `/{subdir}`
         // only when the parser splits it back off (a known platform), and the
         // `:{namespace}:` slot needs a positional channel.
-        let channel = self.name.is_some() && self.channel.is_some_and(channel_renders_by_name);
+        let channel = self.name.is_some() && self.channel.and_then(legacy_channel_name).is_some();
         // A version rendering with whitespace (some lenient version groups)
         // or tokenizer characters would re-split into version and build.
         let version = self
@@ -655,7 +657,8 @@ impl SpecView<'_> {
 
         if placement.channel {
             let channel = self.channel.expect("placement checked by caller");
-            write!(f, "{}", channel.name())?;
+            let name = legacy_channel_name(channel).expect("placement checked by caller");
+            write!(f, "{name}")?;
             if placement.subdir {
                 let subdir = self.subdir.expect("placement checked by caller");
                 write!(f, "/{subdir}")?;
@@ -792,8 +795,8 @@ impl SpecView<'_> {
                                 escape_bracket_value(&channel_url_value(channel))
                             )?;
                             Ok(())
-                        } else if channel_renders_by_name(channel) {
-                            write_scalar(f, ctx, "channel", &channel.name())
+                        } else if let Some(name) = legacy_channel_name(channel) {
+                            write_scalar(f, ctx, "channel", &name)
                         } else {
                             write_scalar(f, ctx, "channel", &channel_url_value(channel))
                         }

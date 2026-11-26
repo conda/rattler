@@ -5157,6 +5157,7 @@ dependencies = [
  "rattler_menuinst",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_redaction",
  "rattler_shell",
  "rattler_sigstore",
  "rayon",

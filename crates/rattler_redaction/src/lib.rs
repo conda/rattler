@@ -64,6 +64,12 @@ pub fn redact_signatures_in_text<'a>(text: &'a str, redaction: &str) -> Cow<'a, 
     Cow::Owned(out)
 }
 
+/// Whether `/t/<token>/` in the path of `url` is a credential. Other schemes,
+/// such as `file:` or `s3:`, use it as a literal path.
+fn is_http(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+}
+
 /// Masks the known secret patterns in a URL for display in logs and error
 /// messages: the password in the userinfo (the username stays), the token in
 /// a `/t/<token>/` path, and a `sig` query parameter such as an Azure SAS
@@ -102,9 +108,10 @@ pub fn redact_url_for_display(url: &Url, redaction: &str) -> Option<Url> {
     // A URL that cannot be a base has no `/t/<token>/` to mask but may still
     // have had a signature masked above; returning `None` here would throw
     // that masking away, since callers fall back to the unredacted URL.
-    let token_prefixed = url.path_segments().is_some_and(|mut segments| {
-        matches!((segments.next(), segments.next()), (Some("t"), Some(_)))
-    });
+    let token_prefixed = is_http(&url)
+        && url.path_segments().is_some_and(|mut segments| {
+            matches!((segments.next(), segments.next()), (Some("t"), Some(_)))
+        });
 
     if token_prefixed {
         let remainder = url
@@ -168,23 +175,32 @@ pub fn strip_url_for_serialization(url: &Url) -> Url {
         let _ = url.set_password(None);
     }
 
-    // A `/t/<token>/` prefix authenticates an HTTP request; the same location
-    // is reachable without it. In other schemes, such as `file:` or `s3:`, it
-    // is a literal path. An empty token means the path is just `/t/`, which is
-    // a channel named `t` rather than a credential.
-    let is_http = matches!(url.scheme(), "http" | "https");
+    // A `/t/<token>/` segment pair authenticates an HTTP request; the same
+    // location is reachable without it. Like conda, it is recognized at any
+    // depth (`https://host/api/t/<token>/channel`), but below the root only
+    // when something follows the token, so a package file named after a
+    // channel `t` is not taken for one. In other schemes, such as `file:` or
+    // `s3:`, it is a literal path. An empty token means the path is just
+    // `/t/`, which is a channel named `t` rather than a credential.
     let path_without_token = url
         .path_segments()
-        .filter(|_| is_http)
-        .and_then(|mut segments| {
-            match (segments.next(), segments.next()) {
-                // The remaining segments include the empty one a trailing slash
-                // produces, so rejoining them preserves it.
-                (Some("t"), Some(token)) if !token.is_empty() => {
-                    Some(format!("/{}", segments.collect::<Vec<_>>().join("/")))
-                }
-                _ => None,
+        .filter(|_| is_http(&url))
+        .and_then(|segments| {
+            let segments = segments.collect::<Vec<_>>();
+            let index = segments
+                .windows(2)
+                .position(|pair| pair[0] == "t" && !pair[1].is_empty())?;
+            if index > 0 && index + 2 >= segments.len() {
+                return None;
             }
+            // The remaining segments include the empty one a trailing slash
+            // produces, so rejoining them preserves it.
+            let kept = segments[..index]
+                .iter()
+                .chain(&segments[index + 2..])
+                .copied()
+                .collect::<Vec<_>>();
+            Some(format!("/{}", kept.join("/")))
         });
     if let Some(path) = path_without_token {
         url.set_path(&path);
@@ -288,6 +304,13 @@ mod test {
 
     #[test]
     fn test_redact_url_for_display() {
+        // Outside HTTP, `/t/` is a literal path segment.
+        let literal = Url::from_str("s3://bucket/t/artifacts/channel/").unwrap();
+        assert_eq!(
+            redact_url_for_display(&literal, DEFAULT_REDACTION_STR),
+            Some(literal)
+        );
+
         assert_eq!(
             redact_url_for_display(
                 &Url::from_str(
@@ -362,6 +385,26 @@ mod test {
         // `/t/` with nothing after it is a channel named `t`, not a token.
         let named_t = Url::parse("https://conda.anaconda.org/t/").unwrap();
         assert_eq!(strip_url_for_serialization(&named_t), named_t);
+
+        // A token below the root is a credential too...
+        for (nested, stripped) in [
+            (
+                "https://example.com/api/t/tk-123/chan/",
+                "https://example.com/api/chan/",
+            ),
+            (
+                "https://example.com/conda/t/tk-123/chan/noarch/repodata.json",
+                "https://example.com/conda/chan/noarch/repodata.json",
+            ),
+        ] {
+            assert_eq!(
+                strip_url_for_serialization(&Url::parse(nested).unwrap()).as_str(),
+                stripped
+            );
+        }
+        // ...but not a trailing `t/<file>` pair, which is a file in channel `t`.
+        let file_in_t = Url::parse("https://example.com/chan/t/pkg.conda").unwrap();
+        assert_eq!(strip_url_for_serialization(&file_in_t), file_in_t);
 
         // Outside HTTP, `/t/` is a literal path segment.
         for literal in [

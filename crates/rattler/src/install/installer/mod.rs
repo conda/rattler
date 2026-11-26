@@ -26,6 +26,7 @@ use rattler_conda_types::{
     Subdir, package::DistArchiveType, prefix_record::Link, utils::ensure_safe_path_component,
 };
 use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
+use rattler_redaction::strip_url_for_serialization;
 use rayon::prelude::*;
 pub use reporter::Reporter;
 use simple_spawn_blocking::tokio::run_blocking_task;
@@ -929,7 +930,15 @@ async fn link_package(
     driver: &InstallDriver,
     requested_specs: Vec<String>,
 ) -> Result<(), InstallerError> {
-    let record = record.clone();
+    // Prefix records ship with the environment, so they must not carry the
+    // credentials the package was fetched with.
+    let mut record = record.clone();
+    record.url = strip_url_for_serialization(&record.url);
+    if let Some(channel) = &mut record.channel
+        && let Ok(url) = url::Url::parse(channel)
+    {
+        *channel = strip_url_for_serialization(&url).to_string();
+    }
     let target_prefix = target_prefix.clone();
     let cached_package_dir = cached_package_dir.to_path_buf();
     let clobber_registry = driver.clobber_registry.clone();
@@ -1614,10 +1623,30 @@ mod tests {
         .map(|spec| MatchSpec::from_str(spec, options).unwrap())
         .collect();
 
+        // The record itself was fetched with credentials too.
+        let mut repo_record = repo_record;
+        repo_record.channel =
+            Some("https://user:password@example.com/t/channel-token/private/".to_string());
+        repo_record.url.set_query(Some("sig=record-signature"));
+
         let installer = Installer::new().with_requested_specs(requested_specs);
         install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
 
-        let record = read_prefix_record(&get_meta_file_path(&target_prefix, &repo_record));
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        let raw = std::fs::read_to_string(&meta_file_path).unwrap();
+        for secret in ["password", "channel-token", "url-token", "signature"] {
+            assert!(
+                !raw.contains(secret),
+                "conda-meta contains `{secret}`:\n{raw}"
+            );
+        }
+
+        let record = read_prefix_record(&meta_file_path);
+        assert_eq!(
+            record.repodata_record.channel.as_deref(),
+            Some("https://example.com/private/")
+        );
+        assert_eq!(record.repodata_record.url.query(), None);
         insta::assert_yaml_snapshot!(record.requested_specs, @r#"
         - "empty[channel=\"https://example.com/private/\"]"
         - "empty[url=\"https://example.com/empty-0.1.0.conda#sha256:abc123\"]"

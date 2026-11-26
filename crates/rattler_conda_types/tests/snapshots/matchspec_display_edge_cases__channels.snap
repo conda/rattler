@@ -28,18 +28,18 @@ canonical : foo[channel="conda-forge[noarch]"]
 
 case      : https://prefix.dev/t/path-token/conda-forge::foo
 legacy    : foo[channel="https://prefix.dev/conda-forge/"]
-  reparse : differs, renders identically
+  reparse : same spec without credentials
 canonical : foo[channel="https://prefix.dev/conda-forge/"]
   reparse : differs from input, stable
 
 case      : foo[channel="https://user:secret@prefix.dev/t/path-token/conda-forge"]
 legacy    : foo[channel="https://prefix.dev/conda-forge/"]
-  reparse : differs, renders identically
+  reparse : same spec without credentials
 canonical : foo[channel="https://prefix.dev/conda-forge/"]
   reparse : differs from input, stable
 
 case      : https://conda.anaconda.org/t/path-token/conda-forge::foo
-legacy    : foo[channel="https://conda.anaconda.org/conda-forge/"]
+legacy    : conda-forge::foo
   reparse : same spec without credentials
 canonical : foo[channel="conda-forge"]
   reparse : differs from input, stable
@@ -69,7 +69,7 @@ canonical : refused: an explicit empty channel-platform selector cannot be repre
 
 case      : channel and url carrying credentials
 legacy    : foo[url="https://prefix.dev/channel/pkg.conda", channel="https://prefix.dev/channel/pkg.conda/"]
-  reparse : differs, renders identically
+  reparse : same spec without credentials
 canonical : foo[channel="https://prefix.dev/channel/pkg.conda/",url="https://prefix.dev/channel/pkg.conda"]
   reparse : differs from input, stable
 

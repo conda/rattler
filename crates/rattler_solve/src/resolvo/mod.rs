@@ -606,10 +606,7 @@ impl<'a> CondaDependencyProvider<'a> {
                         // requested channel.
                         let message = format!(
                             "candidate not in requested channel: '{}'",
-                            spec_channel
-                                .name
-                                .clone()
-                                .unwrap_or(spec_channel.base_url.to_string())
+                            spec_channel.canonical_name()
                         );
                         candidates
                             .excluded
@@ -1209,8 +1206,7 @@ impl super::SolverImpl for Solver {
 
         let root_requirements = task.specs.into_iter().flat_map(|spec| {
             let condition_id = if let Some(condition) = spec.condition.as_ref() {
-                let mut cache = provider.parse_match_spec_cache.borrow_mut();
-                Some(parse_condition(condition, &provider.pool, &mut cache))
+                Some(parse_condition(condition, &provider.pool))
             } else {
                 None
             };
@@ -1296,7 +1292,7 @@ fn parse_match_spec(
         ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
     )?;
     let condition_id = if let Some(condition) = match_spec.condition.as_ref() {
-        let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
+        let condition_id = parse_condition(condition, pool);
         Some(condition_id)
     } else {
         None
@@ -1376,16 +1372,17 @@ pub fn extra_version_set(
 fn parse_condition(
     condition: &MatchSpecCondition,
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
-    parse_match_spec_cache: &mut MatchSpecParseCache,
 ) -> ConditionId {
     match condition {
         MatchSpecCondition::MatchSpec(match_spec) => {
-            // Parse the match spec and intern it
-            let (spec, condition) =
-                parse_match_spec(pool, &match_spec.to_string(), parse_match_spec_cache).unwrap();
-            if let Some(_condition) = condition {
-                panic!("conditions cannot be nested");
-            }
+            // Intern the spec itself rather than reparsing its rendering,
+            // which drops credentials from `url` and `channel` and would no
+            // longer match the records fetched with them.
+            assert!(
+                match_spec.condition.is_none(),
+                "conditions cannot be nested"
+            );
+            let spec = version_sets_for_match_spec(pool, (**match_spec).clone());
             let conditions = spec.into_iter().map(resolvo::Condition::Requirement);
             // Intern the conditions
             let condition_ids = conditions
@@ -1412,8 +1409,8 @@ fn parse_condition(
             }
         }
         MatchSpecCondition::And(left, right) => {
-            let condition_id_lhs = parse_condition(left, pool, parse_match_spec_cache);
-            let condition_id_rhs = parse_condition(right, pool, parse_match_spec_cache);
+            let condition_id_lhs = parse_condition(left, pool);
+            let condition_id_rhs = parse_condition(right, pool);
             // Intern the AND condition
             let condition = resolvo::Condition::Binary(
                 resolvo::LogicalOperator::And,
@@ -1423,8 +1420,8 @@ fn parse_condition(
             pool.intern_condition(condition)
         }
         MatchSpecCondition::Or(left, right) => {
-            let condition_id_lhs = parse_condition(left, pool, parse_match_spec_cache);
-            let condition_id_rhs = parse_condition(right, pool, parse_match_spec_cache);
+            let condition_id_lhs = parse_condition(left, pool);
+            let condition_id_rhs = parse_condition(right, pool);
             // Intern the OR condition
             let condition = resolvo::Condition::Binary(
                 resolvo::LogicalOperator::Or,

@@ -67,9 +67,6 @@ fn one_line(text: &str) -> String {
 fn legacy_outcome(spec: &MatchSpec, rendered: &str) -> String {
     match MatchSpec::from_str(rendered, options()) {
         Ok(reparsed) if reparsed == *spec => "same spec".to_string(),
-        Ok(reparsed) if reparsed.to_string() == rendered => {
-            "differs, renders identically".to_string()
-        }
         // Credentials are never rendered, so the reparse lacks them; the
         // canonical forms, which drop credentials too, still agree.
         Ok(reparsed)
@@ -77,6 +74,9 @@ fn legacy_outcome(spec: &MatchSpec, rendered: &str) -> String {
                 && reparsed.to_canonical_string().ok() == spec.to_canonical_string().ok() =>
         {
             "same spec without credentials".to_string()
+        }
+        Ok(reparsed) if reparsed.to_string() == rendered => {
+            "differs, renders identically".to_string()
         }
         Ok(reparsed) => format!("DIVERGES: {reparsed}"),
         Err(error) => format!("rejected: {}", one_line(&error.to_string())),
