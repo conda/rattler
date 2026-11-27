@@ -16,16 +16,16 @@ digest = { workspace = true }
 hex = { workspace = true }
 md-5 = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
-serde_bytes = { workspace = true }
+serde_bytes = { workspace = true, optional = true }
 serde-untagged = { workspace = true, optional = true }
-serde_with = { workspace = true }
+serde_with = { workspace = true, optional = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util"], optional = true }
 url = { workspace = true }
 
 [features]
 tokio = ["dep:tokio"]
-serde = ["dep:serde", "dep:serde-untagged"]
+serde = ["dep:serde", "dep:serde-untagged", "dep:serde_bytes", "dep:serde_with"]
 
 [package.metadata.docs.rs]
 all-features = true
