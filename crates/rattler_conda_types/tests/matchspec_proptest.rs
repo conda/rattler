@@ -198,15 +198,11 @@ fn spec_under_test() -> BoxedStrategy<MatchSpec> {
 // Equivalence
 // -------------------------------------------------------------------------
 
-/// Compares a reparsed channel against the original: the base URL (optionally
-/// after credentials are stripped) and platform selector are the identity; the
+/// Compares a reparsed channel against the original: the base URL after
+/// credentials are stripped and the platform selector are the identity; the
 /// display name is derived and may differ.
-fn channel_equivalent(original: &Channel, reparsed: &Channel, stripped: bool) -> bool {
-    let original_url = if stripped {
-        strip_url_for_serialization(original.base_url.url())
-    } else {
-        (**original.base_url.url()).clone()
-    };
+fn channel_equivalent(original: &Channel, reparsed: &Channel) -> bool {
+    let original_url = strip_url_for_serialization(original.base_url.url());
     // A channel URL is a directory either way it is written.
     reparsed.base_url.url().as_str().trim_end_matches('/')
         == original_url.as_str().trim_end_matches('/')
@@ -257,16 +253,12 @@ fn track_features_equivalent(original: Option<&[String]>, reparsed: Option<&[Str
 }
 
 /// Asserts that `reparsed` describes the same query as `original`, allowing
-/// only the documented equivalences. `stripped` selects canonical semantics.
-fn assert_faithful(original: &MatchSpec, reparsed: &MatchSpec, rendered: &str, stripped: bool) {
-    let expected_url = if stripped {
-        original.url.as_ref().map(strip_url_for_serialization)
-    } else {
-        original.url.clone()
-    };
+/// only the documented equivalences. Neither dialect renders credentials.
+fn assert_faithful(original: &MatchSpec, reparsed: &MatchSpec, rendered: &str) {
+    let expected_url = original.url.as_ref().map(strip_url_for_serialization);
     let channel_ok = match (original.channel.as_deref(), reparsed.channel.as_deref()) {
         (None, None) => true,
-        (Some(original), Some(reparsed)) => channel_equivalent(original, reparsed, stripped),
+        (Some(original), Some(reparsed)) => channel_equivalent(original, reparsed),
         _ => false,
     };
 
@@ -346,7 +338,7 @@ proptest! {
     fn display_never_silently_diverges(spec in spec_under_test()) {
         let rendered = spec.to_string();
         if let Ok(reparsed) = MatchSpec::from_str(&rendered, strict_v3()) {
-            assert_faithful(&spec, &reparsed, &rendered, false);
+            assert_faithful(&spec, &reparsed, &rendered);
         }
     }
 
@@ -359,7 +351,7 @@ proptest! {
             let reparsed = MatchSpec::from_str(&canonical, strict_v3()).unwrap_or_else(|error| {
                 panic!("canonical {canonical:?} does not reparse: {error}")
             });
-            assert_faithful(&spec, &reparsed, &canonical, true);
+            assert_faithful(&spec, &reparsed, &canonical);
             let again = reparsed.to_canonical_string().unwrap_or_else(|error| {
                 panic!("reparsed canonical {canonical:?} fails to re-render: {error}")
             });
@@ -415,7 +407,7 @@ proptest! {
 
         let original = MatchSpec::from_nameless(nameless, "x".parse().unwrap());
         let reparsed = MatchSpec::from_nameless(reparsed, "x".parse().unwrap());
-        assert_faithful(&original, &reparsed, &rendered, false);
+        assert_faithful(&original, &reparsed, &rendered);
     }
 
     /// The parsers never panic on arbitrary input, and any spec they accept
@@ -426,7 +418,7 @@ proptest! {
             if let Ok(spec) = MatchSpec::from_str(&input, options) {
                 let rendered = spec.to_string();
                 if let Ok(reparsed) = MatchSpec::from_str(&rendered, strict_v3()) {
-                    assert_faithful(&spec, &reparsed, &rendered, false);
+                    assert_faithful(&spec, &reparsed, &rendered);
                 }
                 // Must not panic; fidelity of Ok results is asserted by the
                 // canonical property.
