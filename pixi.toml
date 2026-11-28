@@ -53,7 +53,7 @@ rust = "~=1.99.0"
 cmake = "~=4.5.0"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
-rust-src = "~=1.99.0"
+rust-src = "~=1.100.0"
 cargo-insta = ">=1.48.0,<2"
 go = ">=1.27.1,<2"
 
