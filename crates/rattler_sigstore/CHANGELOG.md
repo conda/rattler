@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_sigstore-v0.3.5...rattler_sigstore-v0.4.0) - 2026-11-28
+
+### Fixed
+
+- *(sigstore)* strip URL from sidecar fetch error sources ([#3255](https://github.com/conda/rattler/pull/3255))
+- *(sigstore)* bind attestations to the record's name, version and build ([#3233](https://github.com/conda/rattler/pull/3233))
+
 ## [0.3.5](https://github.com/conda/rattler/compare/rattler_sigstore-v0.3.4...rattler_sigstore-v0.3.5) - 2026-11-12
 
 ### Other

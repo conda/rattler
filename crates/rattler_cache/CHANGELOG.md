@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.5](https://github.com/conda/rattler/compare/rattler_cache-v0.12.4...rattler_cache-v0.12.5) - 2026-11-28
+
+### Fixed
+
+- *(cache)* start every download retry from an empty directory ([#3232](https://github.com/conda/rattler/pull/3232))
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.12.4](https://github.com/conda/rattler/compare/rattler_cache-v0.12.3...rattler_cache-v0.12.4) - 2026-11-12
 
 ### Other

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.19](https://github.com/conda/rattler/compare/rattler-bin-v0.5.18...rattler-bin-v0.5.19) - 2026-11-28
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.5.18](https://github.com/conda/rattler/compare/rattler-bin-v0.5.17...rattler-bin-v0.5.18) - 2026-11-16
 
 ### Other
