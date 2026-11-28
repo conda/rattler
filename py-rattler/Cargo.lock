@@ -3996,7 +3996,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.55.9"
+version = "0.55.10"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4054,7 +4054,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.12.4"
+version = "0.12.5"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4085,7 +4085,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.58.4"
+version = "0.58.5"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4135,7 +4135,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4175,7 +4175,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_environment_digest"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "hex",
  "rattler_conda_types",
@@ -4184,7 +4184,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.34.9"
+version = "0.34.10"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4222,7 +4222,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.34.15"
+version = "0.34.16"
 dependencies = [
  "ahash",
  "file_url",
@@ -4257,7 +4257,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "configparser",
  "dirs",
@@ -4286,7 +4286,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.34.9"
+version = "0.34.10"
 dependencies = [
  "ambient-id",
  "apple-native-keyring-store",
@@ -4325,7 +4325,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.28.6"
+version = "0.28.7"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4388,7 +4388,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "astral-reqwest-middleware",
  "reqwest",
@@ -4397,7 +4397,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.38.5"
+version = "0.38.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4463,7 +4463,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4482,7 +4482,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.29.11"
+version = "0.29.12"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4503,7 +4503,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sigstore"
-version = "0.3.5"
+version = "0.4.0"
 dependencies = [
  "astral-reqwest-middleware",
  "futures",
@@ -4525,7 +4525,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "13.0.1"
+version = "13.0.2"
 dependencies = [
  "futures",
  "hex",
@@ -4542,7 +4542,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "async-trait",
  "fs-err",
@@ -4572,7 +4572,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "8.1.8"
+version = "8.1.9"
 dependencies = [
  "archspec",
  "libloading",

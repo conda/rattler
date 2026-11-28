@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.58.4...rattler_conda_types-v0.58.5) - 2026-11-28
+
+### Fixed
+
+- never render credentials in match specs ([#3239](https://github.com/conda/rattler/pull/3239))
+- extras should error if given as `extras="foo,bar"` instead of being parsed as a list ([#3224](https://github.com/conda/rattler/pull/3224))
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.58.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.58.3...rattler_conda_types-v0.58.4) - 2026-11-12
 
 ### Other

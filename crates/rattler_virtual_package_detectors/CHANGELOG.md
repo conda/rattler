@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.3.9...rattler_virtual_package_detectors-v0.3.10) - 2026-11-28
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.3.9](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.3.8...rattler_virtual_package_detectors-v0.3.9) - 2026-11-16
 
 ### Other

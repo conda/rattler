@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0](https://github.com/conda/rattler/compare/rattler_upload-v0.16.0...rattler_upload-v0.17.0) - 2026-11-28
+
+### Added
+
+- *(upload)* add --skip-existing to artifactory upload ([#1617](https://github.com/conda/rattler/pull/1617)) ([#3203](https://github.com/conda/rattler/pull/3203))
+- *(upload)* add --skip-existing to cloudsmith upload ([#1617](https://github.com/conda/rattler/pull/1617)) ([#3204](https://github.com/conda/rattler/pull/3204))
+- *(upload)* [**breaking**] add --skip-existing to s3 upload ([#1617](https://github.com/conda/rattler/pull/1617)) ([#3190](https://github.com/conda/rattler/pull/3190))
+- *(upload)* add --skip-existing to quetz upload ([#1617](https://github.com/conda/rattler/pull/1617)) ([#3201](https://github.com/conda/rattler/pull/3201))
+
+### Fixed
+
+- *(rattler_upload)* fix Cloudsmith multipart upload for packages >= 100 MiB ([#3149](https://github.com/conda/rattler/pull/3149)) ([#3198](https://github.com/conda/rattler/pull/3198))
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.16.0](https://github.com/conda/rattler/compare/rattler_upload-v0.15.6...rattler_upload-v0.16.0) - 2026-11-16
 
 ### Added

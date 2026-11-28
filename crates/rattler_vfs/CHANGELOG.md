@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.4...rattler_vfs-v0.2.5) - 2026-11-28
+
+### Other
+
+- remove unused dependencies ([#3217](https://github.com/conda/rattler/pull/3217))
+
 ## [0.2.4](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.3...rattler_vfs-v0.2.4) - 2026-11-16
 
 ### Other

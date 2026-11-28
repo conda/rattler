@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.7...rattler_redaction-v0.2.8) - 2026-11-28
+
+### Fixed
+
+- *(sigstore)* strip URL from sidecar fetch error sources ([#3255](https://github.com/conda/rattler/pull/3255))
+- never render credentials in match specs ([#3239](https://github.com/conda/rattler/pull/3239))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.6...rattler_redaction-v0.2.7) - 2026-10-05
 
 ### Added
