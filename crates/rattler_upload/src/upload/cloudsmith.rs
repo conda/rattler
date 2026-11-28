@@ -8,6 +8,7 @@ use serde::Deserialize;
 use tracing::{debug, info};
 
 use crate::tool_configuration::APP_USER_AGENT;
+use crate::upload::opt::SkipExisting;
 
 /// Chunk size for multi-part uploads (100 MB).
 pub const CHUNK_SIZE: usize = 1024 * 1024 * 100;
@@ -54,6 +55,15 @@ pub enum CloudsmithError {
         body: String,
     },
 
+    /// Failed to list packages.
+    #[error("failed to list packages (HTTP {status}): {body}")]
+    PackageListFailed {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body.
+        body: String,
+    },
+
     /// Failed to create the package.
     #[error("failed to create package (HTTP {status}): {body}")]
     PackageCreationFailed {
@@ -94,6 +104,32 @@ pub struct PackageResponse {
     pub slug_perm: String,
     /// The URL-friendly slug.
     pub slug: String,
+}
+
+/// Summary representation of a package from the Cloudsmith package list endpoint.
+#[derive(Deserialize, Debug)]
+pub struct CloudsmithPackageSummary {
+    /// The filename of the package.
+    #[serde(default)]
+    pub filename: Option<String>,
+    /// The integer status code (4 = Completed).
+    #[serde(default)]
+    pub status: Option<u32>,
+    /// The string status representation ("Completed").
+    #[serde(default)]
+    pub status_str: Option<String>,
+    /// Whether package synchronization is completed.
+    #[serde(default)]
+    pub is_sync_completed: Option<bool>,
+}
+
+impl CloudsmithPackageSummary {
+    /// Returns true if the package synchronization has completed successfully.
+    pub fn is_completed(&self) -> bool {
+        self.is_sync_completed == Some(true)
+            || self.status == Some(4)
+            || self.status_str.as_deref() == Some("Completed")
+    }
 }
 
 pub struct Cloudsmith {
@@ -300,12 +336,45 @@ impl Cloudsmith {
         Ok(())
     }
 
+    /// Check whether a package with the given filename already exists in the repository
+    /// and has completed synchronization.
+    pub async fn package_exists(&self, filename: &str) -> Result<bool, CloudsmithError> {
+        let url = self
+            .url
+            .join(&format!("packages/{}/{}/", self.owner, self.repo))
+            .into_diagnostic()?;
+
+        debug!("checking if package exists: {filename}");
+
+        let resp = self
+            .client
+            .get(url)
+            .query(&[("query", format!("filename:{filename}"))])
+            .send()
+            .await
+            .map_err(CloudsmithError::UploadFailed)?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.into_diagnostic()?;
+            return Err(CloudsmithError::PackageListFailed { status, body });
+        }
+
+        let packages: Vec<CloudsmithPackageSummary> = resp.json().await.into_diagnostic()?;
+        let exists = packages
+            .iter()
+            .any(|pkg| pkg.filename.as_deref() == Some(filename) && pkg.is_completed());
+
+        Ok(exists)
+    }
+
     /// Create a conda package from a previously uploaded file.
     pub async fn create_package(
         &self,
         file_identifier: &str,
         republish: bool,
-    ) -> Result<PackageResponse, CloudsmithError> {
+        skip_existing: SkipExisting,
+    ) -> Result<Option<PackageResponse>, CloudsmithError> {
         let url = self
             .url
             .join(&format!(
@@ -327,13 +396,19 @@ impl Cloudsmith {
             .await
             .into_diagnostic()?;
 
+        if skip_existing.is_enabled() && resp.status() == reqwest::StatusCode::CONFLICT {
+            debug!("package already exists (HTTP 409 Conflict), skipping");
+            return Ok(None);
+        }
+
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.into_diagnostic()?;
             return Err(CloudsmithError::PackageCreationFailed { status, body });
         }
 
-        resp.json().await.into_diagnostic().map_err(Into::into)
+        let pkg: PackageResponse = resp.json().await.into_diagnostic()?;
+        Ok(Some(pkg))
     }
 }
 
@@ -345,6 +420,7 @@ mod test {
     use url::Url;
 
     use super::Cloudsmith;
+    use crate::upload::opt::SkipExisting;
 
     #[tokio::test]
     async fn test_cloudsmith_client_sends_api_key_header() {
@@ -527,9 +603,10 @@ mod test {
         assert!(completion_called_with_id.load(Ordering::SeqCst));
 
         let pkg = client
-            .create_package(&upload_resp.identifier, false)
+            .create_package(&upload_resp.identifier, false, SkipExisting(false))
             .await
-            .expect("create_package failed");
+            .expect("create_package failed")
+            .expect("expected package response");
         assert_eq!(pkg.slug_perm, "mp-slug-perm");
     }
 
@@ -571,16 +648,132 @@ mod test {
         );
 
         let pkg = client
-            .create_package("test-file-id", true)
+            .create_package("test-file-id", true, SkipExisting(false))
             .await
-            .expect("create_package failed");
+            .expect("create_package failed")
+            .expect("expected package response");
         assert_eq!(pkg.slug_perm, "pkg-slug-perm");
         assert!(republish_seen.load(Ordering::SeqCst));
 
         let _ = client
-            .create_package("test-file-id", false)
+            .create_package("test-file-id", false, SkipExisting(false))
             .await
             .expect("create_package failed");
         assert!(!republish_seen.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_create_package_conflict_skip_existing() {
+        use super::CloudsmithError;
+
+        let router = Router::new().route(
+            "/packages/{owner}/{repo}/upload/conda/",
+            post(|| async {
+                (
+                    StatusCode::CONFLICT,
+                    [("content-type", "application/json")],
+                    serde_json::json!({
+                        "error": "Package already exists"
+                    })
+                    .to_string(),
+                )
+            }),
+        );
+
+        let url = crate::upload::test_utils::start_test_server(router).await;
+        let client = Cloudsmith::new(
+            "test-api-key".to_string(),
+            url.into(),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+        );
+
+        // With skip_existing = false -> should fail with PackageCreationFailed 409
+        let err_result = client
+            .create_package("test-file-id", false, SkipExisting(false))
+            .await;
+        assert!(err_result.is_err());
+        assert!(matches!(
+            err_result.unwrap_err(),
+            CloudsmithError::PackageCreationFailed { status: 409, .. }
+        ));
+
+        // With skip_existing = true -> should succeed and return Ok(None)
+        let skip_result = client
+            .create_package("test-file-id", false, SkipExisting(true))
+            .await;
+        assert!(skip_result.is_ok());
+        assert!(skip_result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_package_exists() {
+        use axum::routing::get;
+
+        let router = Router::new().route(
+            "/packages/{owner}/{repo}/",
+            get(
+                |axum::extract::RawQuery(query): axum::extract::RawQuery| async move {
+                    let query = query.unwrap_or_default();
+                    if query.contains("test-existing.conda") {
+                        (
+                            StatusCode::OK,
+                            [("content-type", "application/json")],
+                            serde_json::json!([
+                                {
+                                    "filename": "test-existing.conda",
+                                    "status": 4,
+                                    "status_str": "Completed",
+                                    "is_sync_completed": true
+                                }
+                            ])
+                            .to_string(),
+                        )
+                    } else if query.contains("test-failed.conda") {
+                        (
+                            StatusCode::OK,
+                            [("content-type", "application/json")],
+                            serde_json::json!([
+                                {
+                                    "filename": "test-failed.conda",
+                                    "status": 5,
+                                    "status_str": "Failed",
+                                    "is_sync_completed": false
+                                }
+                            ])
+                            .to_string(),
+                        )
+                    } else {
+                        (
+                            StatusCode::OK,
+                            [("content-type", "application/json")],
+                            serde_json::json!([]).to_string(),
+                        )
+                    }
+                },
+            ),
+        );
+
+        let url = crate::upload::test_utils::start_test_server(router).await;
+        let client = Cloudsmith::new(
+            "test-api-key".to_string(),
+            url.into(),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+        );
+
+        // 1. Existing completed package -> returns Ok(true)
+        assert!(client.package_exists("test-existing.conda").await.unwrap());
+
+        // 2. Non-existent package -> returns Ok(false)
+        assert!(
+            !client
+                .package_exists("test-nonexistent.conda")
+                .await
+                .unwrap()
+        );
+
+        // 3. Package with failed sync -> returns Ok(false)
+        assert!(!client.package_exists("test-failed.conda").await.unwrap());
     }
 }
