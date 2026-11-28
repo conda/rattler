@@ -6,11 +6,17 @@ use url::Url;
 /// A default string to use for redaction.
 pub const DEFAULT_REDACTION_STR: &str = "********";
 
-/// The signature is the credential itself; the rest of such a URL is inert without
-/// it and stays readable.
-const SIGNATURE_PARAM: &str = "sig";
+/// Query parameters that carry a pre-signed URL's signature or session token;
+/// the rest of such a URL is inert without them and stays readable.
+const SIGNATURE_PARAMS: &[&str] = &[
+    "sig",                  // Azure SAS
+    "x-amz-signature",      // AWS S3 SigV4
+    "x-amz-security-token", // AWS STS session token
+    "signature",            // AWS S3 SigV2 / CloudFront
+    "x-goog-signature",     // GCS V4
+];
 
-/// The byte range of a `sig` parameter's value, starting right after the
+/// The byte range of a signature parameter's value, starting right after the
 /// `=` at `equals` (an offset into `pair = &text[separator + 1..]`) and
 /// ending at the first character that cannot be part of the value.
 ///
@@ -40,7 +46,10 @@ pub fn redact_signatures_in_text<'a>(text: &'a str, redaction: &str) -> Cow<'a, 
         let Some(equals) = pair.find('=') else {
             continue;
         };
-        if !pair[..equals].eq_ignore_ascii_case(SIGNATURE_PARAM) {
+        if !SIGNATURE_PARAMS
+            .iter()
+            .any(|param| pair[..equals].eq_ignore_ascii_case(param))
+        {
             continue;
         }
 
@@ -72,9 +81,11 @@ fn is_http(url: &Url) -> bool {
 
 /// Masks the known secret patterns in a URL for display in logs and error
 /// messages: the password in the userinfo (the username stays), the token in
-/// a `/t/<token>/` path, and a `sig` query parameter such as an Azure SAS
-/// signature. Other query parameters and the fragment are left untouched, so
-/// the URL stays recognizable for debugging.
+/// a `/t/<token>/` path, and pre-signed URL signature or session-token query
+/// parameters (such as Azure SAS `sig`, AWS S3 `X-Amz-Signature`,
+/// `X-Amz-Security-Token`, and `Signature`, and GCS `X-Goog-Signature`).
+/// Other query parameters and the fragment are left untouched, so the URL
+/// stays recognizable for debugging.
 ///
 /// Use [`strip_url_for_serialization`] instead when the URL is written into
 /// durable output.
@@ -288,6 +299,31 @@ mod test {
             format!(
                 "https://acct.blob.core.windows.net/c/p?sv=2025-01-05&sig={DEFAULT_REDACTION_STR}"
             )
+        );
+
+        // AWS S3 SigV4 presigned URL (with STS session token)
+        let s3_url = "https://bucket.s3.us-east-1.amazonaws.com/chan/pkg.conda?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE%2F20260101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Security-Token=SESSION_TOKEN&X-Amz-Signature=deadbeef1234";
+        assert_eq!(
+            Url::from_str(s3_url).unwrap().redact().to_string(),
+            format!(
+                "https://bucket.s3.us-east-1.amazonaws.com/chan/pkg.conda?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE%2F20260101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Security-Token={DEFAULT_REDACTION_STR}&X-Amz-Signature={DEFAULT_REDACTION_STR}"
+            )
+        );
+
+        // Case-insensitive match, AWS SigV2 / CloudFront `Signature`, and GCS `X-Goog-Signature`
+        assert_eq!(
+            redact_signatures_in_text(
+                "https://b.s3.amazonaws.com/k?AWSAccessKeyId=AKIA&Signature=abc%3D&Expires=123",
+                "X"
+            ),
+            "https://b.s3.amazonaws.com/k?AWSAccessKeyId=AKIA&Signature=X&Expires=123"
+        );
+        assert_eq!(
+            redact_signatures_in_text(
+                "https://storage.googleapis.com/b/k?X-Goog-Algorithm=GOOG4-RSA-SHA256&x-goog-signature=secret",
+                "X"
+            ),
+            "https://storage.googleapis.com/b/k?X-Goog-Algorithm=GOOG4-RSA-SHA256&x-goog-signature=X"
         );
     }
 

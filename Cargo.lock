@@ -5867,6 +5867,7 @@ dependencies = [
  "axum",
  "futures",
  "hex",
+ "http",
  "jiff",
  "rattler_conda_types",
  "rattler_digest",

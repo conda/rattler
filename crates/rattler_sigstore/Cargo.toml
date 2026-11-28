@@ -21,7 +21,7 @@ hex = { workspace = true }
 jiff = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
-rattler_redaction = { workspace = true, features = ["reqwest", "reqwest-middleware"] }
+rattler_redaction = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = ["stream"] }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -35,6 +35,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 axum = { workspace = true }
+http = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower-http = { workspace = true, features = ["fs"] }

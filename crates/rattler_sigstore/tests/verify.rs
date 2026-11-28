@@ -508,3 +508,58 @@ fn verify_rejects_record_that_differs_from_its_file_name() {
         assert!(matches!(err, SigstoreError::RecordMismatch { .. }), "{err}");
     }
 }
+
+/// Joins the `Display` of an error and every error in its `source()` chain,
+/// which is what miette, anyhow and similar reporters print.
+fn error_chain(err: &dyn std::error::Error) -> String {
+    std::iter::successors(Some(err), |err| err.source())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
+/// Stands in for a middleware that rewrites the request URL into one carrying
+/// a secret that URL redaction does not know about, like S3 presigning does.
+fn presign<'a>(
+    mut req: reqwest::Request,
+    extensions: &'a mut http::Extensions,
+    next: reqwest_middleware::Next<'a>,
+) -> futures::future::BoxFuture<'a, reqwest_middleware::Result<reqwest::Response>> {
+    req.url_mut()
+        .set_query(Some("X-Amz-Signature=TEST_SIGNATURE"));
+    Box::pin(next.run(req, extensions))
+}
+
+#[tokio::test]
+async fn fetch_sidecar_error_chain_does_not_leak_credentials() {
+    // Bind and drop a listener so the port is known to be closed.
+    let listener = std::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+
+    let channel = Url::parse(&format!("http://127.0.0.1:{port}/t/TEST_SECRET/channel/")).unwrap();
+    let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+        .with(presign)
+        .build();
+    let err = fetch_sidecar(&client, &record(&channel, Some(sidecar_hash())), 1 << 20)
+        .await
+        .unwrap_err();
+
+    let chain = error_chain(&err);
+    assert!(!chain.contains("TEST_SECRET"), "{chain}");
+    assert!(!chain.contains("TEST_SIGNATURE"), "{chain}");
+    // The source is stripped of its URL because the outer message names the
+    // redacted one.
+    assert!(chain.contains("/t/********/"), "{chain}");
+    // The cause must survive. Its text is OS specific, so check its kind.
+    assert!(
+        matches!(
+            &err,
+            SigstoreError::FetchSidecar {
+                source: reqwest_middleware::Error::Reqwest(source),
+                ..
+            } if source.is_connect()
+        ),
+        "{chain}"
+    );
+}
