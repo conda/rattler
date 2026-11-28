@@ -1027,6 +1027,13 @@ impl PackageCache {
                 // Retry until the retry policy says to stop
                 loop {
                     current_try += 1;
+                    // A failed attempt can leave files behind that are not part
+                    // of the package that is eventually verified and cached.
+                    // Start every retry from an empty destination.
+                    if current_try > 1 {
+                        tokio_fs::remove_dir_all(&destination).await?;
+                        tokio_fs::create_dir_all(&destination).await?;
+                    }
                     tracing::debug!("downloading {} to {}", &url, destination.display());
                     let reporter = download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
                         reporter,
@@ -3224,6 +3231,74 @@ mod test {
         tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
 
         Url::parse(&format!("http://localhost:{port}/{file_name}")).unwrap()
+    }
+
+    /// The first response is an archive that writes a file and then fails to
+    /// extract, the retry gets the genuine archive. The cache entry must hold
+    /// only the genuine package, even though it is stored under its hash.
+    #[tokio::test]
+    async fn test_retry_discards_files_of_failed_attempt() {
+        let archive = get_test_data_dir().join("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
+        let file_name = archive.file_name().unwrap().to_str().unwrap().to_owned();
+        let genuine = fs_err::read(&archive).unwrap();
+
+        let mut tar = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(7);
+        header.set_mode(0o644);
+        tar.append_data(&mut header, "planted.txt", &b"planted"[..])
+            .unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Link);
+        header.set_size(0);
+        tar.append_link(&mut header, "zz_fail", "does/not/exist")
+            .unwrap();
+        let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::fast());
+        std::io::Write::write_all(&mut encoder, &tar.into_inner().unwrap()).unwrap();
+        let failing = encoder.finish().unwrap();
+
+        let served_failing = Arc::new(AtomicBool::new(false));
+        let router = Router::new().route(
+            &format!("/{file_name}"),
+            get(move || {
+                let body = if served_failing.swap(true, Ordering::SeqCst) {
+                    genuine.clone()
+                } else {
+                    failing.clone()
+                };
+                async move { body }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind(SocketAddr::new([127, 0, 0, 1].into(), 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+        let url = Url::parse(&format!("http://localhost:{port}/{file_name}")).unwrap();
+
+        let key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&url).unwrap())
+            .with_sha256(compute_file_digest::<Sha256>(&archive).unwrap());
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let metadata = cache
+            .get_or_fetch_from_url_with_retry(
+                key,
+                url,
+                ClientBuilder::new(Client::default()).build().into(),
+                ExponentialBackoffBuilder::default()
+                    .retry_bounds(
+                        std::time::Duration::from_millis(1),
+                        std::time::Duration::from_millis(1),
+                    )
+                    .build_with_max_retries(2),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(metadata.path().join("another-clobber.txt").is_file());
+        assert!(!metadata.path().join("planted.txt").exists());
     }
 
     /// Downloads the cpython archive while the cache key advertises the hash

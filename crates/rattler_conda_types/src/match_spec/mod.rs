@@ -53,6 +53,11 @@ use package_name_matcher::PackageNameMatcher;
 /// in a single bracket section, and the same spec always renders to the same
 /// string.
 ///
+/// Neither form renders credentials: userinfo, an HTTP(S) `/t/<token>/` path
+/// segment, query strings, and fragments other than a package digest are
+/// removed from channel and package URLs. A spec carrying them therefore does
+/// not round-trip through its string form.
+///
 /// When `MatchSpec` attribute values are simple strings, the are interpreted using the
 /// following conventions:
 ///   - If the string begins with `^` and ends with `$`, it is converted to a regex.

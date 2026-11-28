@@ -46,9 +46,11 @@ serde_json = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 axum = { workspace = true }
+bzip2 = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 rstest = { workspace = true }
+tar = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tools = { path = "../tools" }
