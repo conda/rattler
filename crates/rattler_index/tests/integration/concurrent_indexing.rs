@@ -15,7 +15,7 @@ use rattler_conda_types::Subdir;
 use rattler_index::{PackageRevisionAssignment, PreconditionChecks, index};
 use tracing::Instrument;
 
-use super::etag_memory_backend::ETagMemoryBuilder;
+use tools::etag_memory_backend::{ETagMemoryBuilder, Operation, TestHooks};
 
 /// Validates that concurrent indexing properly handles race conditions with retry logic.
 ///
@@ -56,15 +56,13 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     let stat_count = Arc::new(AtomicU8::new(0));
     let stat_count_clone = stat_count.clone();
 
-    let test_hooks = super::etag_memory_backend::TestHooks {
+    let test_hooks = TestHooks {
         on_operation: Arc::new(move |path, op| {
             let stat_barrier = stat_barrier_clone.clone();
             let stat_count = stat_count_clone.clone();
             let path = path.to_string();
             Box::pin(async move {
-                if path == "noarch/repodata.json"
-                    && op == super::etag_memory_backend::Operation::AfterStat
-                {
+                if path == "noarch/repodata.json" && op == Operation::AfterStat {
                     let count = stat_count.fetch_add(1, Ordering::SeqCst);
                     if count < 2 {
                         // First two stats - wait at barrier

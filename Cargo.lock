@@ -5478,6 +5478,8 @@ version = "0.34.9"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral_async_zip",
+ "axum",
  "bytes",
  "clap",
  "clap-verbosity-flag",
@@ -5510,6 +5512,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "zip",
  "zstd",
 ]
 
@@ -7934,12 +7937,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bindgen",
+ "bytes",
  "clap",
  "difference",
  "dirs",
  "fs-err",
  "fslock",
  "hex",
+ "opendal",
  "rattler_digest",
  "reqwest",
  "tempfile",

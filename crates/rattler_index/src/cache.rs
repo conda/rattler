@@ -8,14 +8,17 @@
 //! with any `OpenDAL` backend, using conditional reads when supported (S3, HTTP) or simple
 //! reads as fallback (filesystem).
 
-use std::{sync::Arc, time::SystemTime};
+use std::{future::Future, io, sync::Arc, time::SystemTime};
 
-use opendal::{Operator, raw::Timestamp};
+use opendal::{Buffer, ErrorKind, Operator, raw::Timestamp};
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
 use tokio::sync::RwLock;
 
-use crate::{IndexedPackageRecord, RepodataFileMetadata};
+use crate::{
+    IndexedPackageRecord, PreconditionChecks, RepodataFileMetadata, parse_package_buffer,
+    streaming::read_package, utils::read_with_metadata_check,
+};
 
 /// A cached package record with its associated metadata for validation.
 #[derive(Debug, Clone)]
@@ -174,38 +177,76 @@ impl PackageRecordCache {
 /// same version that was stated. Retries with exponential backoff if the file changes
 /// between `stat()` and `read()`.
 ///
-/// Only retries on [`ErrorKind::ConditionNotMatch`]. Falls back to simple `read()` for
-/// backends without conditional read support (returns [`ErrorKind::Unsupported`]).
+/// Retry on [`ErrorKind::ConditionNotMatch`]. If a backend reports
+/// [`ErrorKind::Unsupported`], disable request conditions and retry the read.
 ///
 /// Returns `(buffer, final_metadata)` where `final_metadata` reflects the version actually
 /// read (may differ from `initial_metadata` if retries occurred).
-///
-/// [`ErrorKind::ConditionNotMatch`]: opendal::ErrorKind::ConditionNotMatch
-/// [`ErrorKind::Unsupported`]: opendal::ErrorKind::Unsupported
 pub async fn read_package_with_retry(
     op: &Operator,
     path: &str,
     initial_metadata: RepodataFileMetadata,
-) -> opendal::Result<(opendal::Buffer, RepodataFileMetadata)> {
+) -> opendal::Result<(Buffer, RepodataFileMetadata)> {
+    read_with_retry(op, path, initial_metadata, |metadata| async move {
+        read_with_metadata_check(op, path, &metadata).await
+    })
+    .await
+}
+
+/// Read one archive version and parse its record, preserving parsing errors.
+/// Streaming `.conda` reads retry hashing and metadata together after replacement.
+pub(crate) async fn read_package_record_with_retry(
+    op: &Operator,
+    path: &str,
+    initial_metadata: RepodataFileMetadata,
+) -> io::Result<(IndexedPackageRecord, RepodataFileMetadata)> {
+    if path.ends_with(".conda") {
+        read_with_retry(op, path, initial_metadata, |metadata| async move {
+            read_package(op, path, &metadata).await
+        })
+        .await
+        .map_err(io::Error::other)
+    } else {
+        let (buffer, metadata) = read_package_with_retry(op, path, initial_metadata)
+            .await
+            .map_err(io::Error::other)?;
+        Ok((parse_package_buffer(buffer, path)?, metadata))
+    }
+}
+
+/// Retry an entire read on `ConditionNotMatch`, refreshing its identity each time.
+/// `Unsupported` disables request conditions but keeps replacement retries enabled.
+async fn read_with_retry<T, Fut>(
+    op: &Operator,
+    path: &str,
+    initial_metadata: RepodataFileMetadata,
+    read: impl Fn(RepodataFileMetadata) -> Fut,
+) -> opendal::Result<(T, RepodataFileMetadata)>
+where
+    Fut: Future<Output = opendal::Result<T>>,
+{
     let retry_policy = default_retry_policy();
     let mut current_try = 0;
+    let mut use_conditions = initial_metadata.precondition_checks.is_enabled();
     let mut metadata = initial_metadata;
 
     loop {
         let request_start_time = SystemTime::now();
 
-        // Try to read the file with conditional checks
-        match crate::utils::read_with_metadata_check(op, path, &metadata).await {
-            Ok(buffer) => return Ok((buffer, metadata)),
-            Err(e) if e.kind() == opendal::ErrorKind::Unsupported => {
-                // Backend doesn't support conditional reads (e.g., filesystem) -
-                // fall back to simple read without retry logic
+        let mut attempt = metadata.clone();
+        if !use_conditions {
+            attempt.precondition_checks = PreconditionChecks::Disabled;
+        }
+        match read(attempt).await {
+            Ok(result) => return Ok((result, metadata)),
+            Err(e) if e.kind() == ErrorKind::Unsupported && use_conditions => {
+                // Unsupported request conditions must not bypass retries when
+                // the unconditional hash/metadata attempt detects a replacement.
                 tracing::debug!(
-                    "Conditional reads not supported for {}, using simple read",
+                    "Conditional reads not supported for {}, disabling request conditions",
                     path
                 );
-                let buffer = op.read(path).await?;
-                return Ok((buffer, metadata));
+                use_conditions = false;
             }
             Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
                 // File changed - check if we should retry

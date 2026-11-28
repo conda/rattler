@@ -4187,6 +4187,7 @@ version = "0.34.9"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral_async_zip",
  "bytes",
  "clap",
  "clap-verbosity-flag",

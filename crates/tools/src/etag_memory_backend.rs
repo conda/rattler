@@ -30,7 +30,11 @@ use std::{
 use bytes::Bytes;
 use opendal::{
     Buffer, Builder, BytesRange, Capability, Error, ErrorKind, Metadata, MetadataBuilder,
-    OperationContext, Operator, Result, raw::*,
+    OperationContext, Result,
+    raw::{
+        OpCopy, OpCreateDir, OpDelete, OpList, OpPresign, OpRead, OpRename, OpStat, OpWrite,
+        RpCreateDir, RpPresign, RpRead, RpRename, RpStat, Service, ServiceInfo, Timestamp, oio,
+    },
 };
 use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
@@ -182,38 +186,56 @@ impl Default for TestHooks {
     }
 }
 
+/// Storage behaviors used to exercise version checks and read fallbacks.
+#[derive(Clone, Copy, Debug, Default)]
+struct StorageBehavior {
+    omit_identity: bool,
+    timestamp_only: bool,
+    reject_conditions: bool,
+    reject_ranges: bool,
+}
+
 /// In-memory storage backend with `ETag` and conditional request support.
 ///
 /// Implements `opendal`'s `Service` trait to provide S3-like behavior for
 /// testing, including `ETag` generation and validation of conditional HTTP
 /// requests.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ETagMemoryBackend {
     storage: Arc<RwLock<HashMap<String, Arc<RwLock<FileEntry>>>>>,
     directories: Arc<RwLock<HashSet<String>>>,
     test_hooks: Option<TestHooks>,
+    behavior: StorageBehavior,
 }
 
 impl ETagMemoryBackend {
+    /// Create isolated storage so concurrent test cases cannot share files.
     pub fn new() -> Self {
-        Self {
-            storage: Arc::new(RwLock::new(HashMap::new())),
-            directories: Arc::new(RwLock::new(HashSet::new())),
-            test_hooks: None,
-        }
+        Self::default()
     }
 
     pub fn with_test_hooks(hooks: TestHooks) -> Self {
         Self {
-            storage: Arc::new(RwLock::new(HashMap::new())),
-            directories: Arc::new(RwLock::new(HashSet::new())),
             test_hooks: Some(hooks),
+            ..Self::new()
         }
     }
 
     async fn run_hook(&self, path: &str, operation: Operation) {
         if let Some(hooks) = &self.test_hooks {
             (hooks.on_operation)(path, operation).await;
+        }
+    }
+
+    fn metadata(&self, entry: &FileEntry) -> Metadata {
+        if self.behavior.omit_identity {
+            MetadataBuilder::file(entry.data.len() as u64).build()
+        } else if self.behavior.timestamp_only {
+            let mut metadata = MetadataBuilder::file(entry.data.len() as u64);
+            metadata.last_modified(Timestamp::from_second(1_900_000_000).unwrap());
+            metadata.build()
+        } else {
+            entry.metadata()
         }
     }
 
@@ -354,9 +376,32 @@ impl ETagMemoryBackend {
 #[derive(Default, Debug)]
 pub struct ETagMemoryBuilder {
     test_hooks: Option<TestHooks>,
+    behavior: StorageBehavior,
 }
 
 impl ETagMemoryBuilder {
+    /// Simulate storage that permits only whole-object reads.
+    pub fn without_range_reads(mut self) -> Self {
+        self.behavior.reject_ranges = true;
+        self
+    }
+    /// Simulate timestamp-only storage with coarse modification times.
+    pub fn with_timestamp_only(mut self) -> Self {
+        self.behavior.timestamp_only = true;
+        self
+    }
+
+    /// Simulate storage that provides no object-version metadata.
+    pub fn without_identity(mut self) -> Self {
+        self.behavior.omit_identity = true;
+        self
+    }
+
+    /// Simulate a store that returns `ETags` but rejects conditional reads.
+    pub fn without_conditional_reads(mut self) -> Self {
+        self.behavior.reject_conditions = true;
+        self
+    }
     pub fn with_test_hooks(mut self, hooks: TestHooks) -> Self {
         self.test_hooks = Some(hooks);
         self
@@ -367,11 +412,13 @@ impl Builder for ETagMemoryBuilder {
     type Config = ();
 
     fn build(self) -> Result<impl Service> {
-        if let Some(hooks) = self.test_hooks {
-            Ok(ETagMemoryBackend::with_test_hooks(hooks))
+        let mut backend = if let Some(hooks) = self.test_hooks {
+            ETagMemoryBackend::with_test_hooks(hooks)
         } else {
-            Ok(ETagMemoryBackend::new())
-        }
+            ETagMemoryBackend::new()
+        };
+        backend.behavior = self.behavior;
+        Ok(backend)
     }
 }
 
@@ -393,8 +440,8 @@ impl Service for ETagMemoryBackend {
             stat_with_if_match: true,
             stat_with_if_none_match: true,
             read: true,
-            read_with_if_match: true,
-            read_with_if_none_match: true,
+            read_with_if_match: !self.behavior.reject_conditions,
+            read_with_if_none_match: !self.behavior.reject_conditions,
             write: true,
             write_can_empty: true,
             write_with_if_match: true,
@@ -429,7 +476,7 @@ impl Service for ETagMemoryBackend {
             check_if_match(&entry.etag, args.if_match(), "")?;
             check_if_none_match(&entry.etag, args.if_none_match(), "")?;
 
-            entry.metadata()
+            self.metadata(&entry)
         }; // entry lock is dropped here
 
         // Test hook: call callback after operation
@@ -544,6 +591,12 @@ pub struct ETagMemoryReader {
 
 impl oio::StreamRead for ETagMemoryReader {
     async fn open(&self, range: BytesRange) -> Result<(RpRead, Box<dyn oio::ReadStreamDyn>)> {
+        if self.backend.behavior.reject_ranges && (range.offset() != 0 || range.size().is_some()) {
+            return Err(Error::new(
+                ErrorKind::Unsupported,
+                "range reads unavailable",
+            ));
+        }
         let path = self.path.as_str();
 
         // Test hook: call callback before operation
@@ -558,7 +611,11 @@ impl oio::StreamRead for ETagMemoryReader {
             drop(storage);
 
             let entry = entry_lock.read().await;
-            (entry.metadata(), entry.last_modified, entry.data.clone())
+            (
+                self.backend.metadata(&entry),
+                entry.last_modified,
+                entry.data.clone(),
+            )
         }; // entry lock is dropped here
 
         // Check conditions
@@ -677,6 +734,7 @@ impl oio::List for ETagMemoryLister {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opendal::Operator;
 
     /// Validates basic read/write operations work correctly.
     #[tokio::test]

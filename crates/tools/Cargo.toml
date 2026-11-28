@@ -6,10 +6,13 @@ publish = false
 
 [features]
 default = ["rustls"]
+opendal = ["dep:opendal", "dep:bytes"]
 native-tls = ["reqwest/native-tls"]
 rustls = ["reqwest/rustls"]
 
 [dependencies]
+bytes = { workspace = true, optional = true }
+opendal = { workspace = true, default-features = false, optional = true }
 anyhow = { workspace = true }
 bindgen = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
