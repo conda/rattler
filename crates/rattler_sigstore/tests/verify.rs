@@ -472,3 +472,39 @@ async fn verify_record_end_to_end() {
             .unwrap();
     assert!(!outcome.is_verified());
 }
+
+/// A channel host keeps the genuine file name, sha256 and sidecar but rewrites
+/// the name, version or build in the record. The genuine attestation must not
+/// vouch for the rewritten record.
+#[test]
+fn verify_rejects_record_that_differs_from_its_file_name() {
+    let channel = Url::parse("https://prefix.dev/github-releases/").unwrap();
+    let genuine = record(&channel, Some(sidecar_hash()));
+    let sidecar = rattler_sigstore::parse_sidecar(&genuine.url, SIDECAR, &sidecar_hash()).unwrap();
+    let verify = |record: &RepoDataRecord| {
+        verify_bundles(
+            record,
+            &sidecar.bundles,
+            ChannelCheck::Require,
+            &trusted_root(),
+        )
+    };
+
+    // An equivalent spelling of the same version is the same package.
+    let mut same = genuine.clone();
+    same.package_record.version = VersionWithSource::from_str("1.7.12.0").unwrap();
+    let result = verify(&same).unwrap();
+    assert!(result.rejected.is_empty(), "{:?}", result.rejected);
+    assert_eq!(result.verified.len(), 1);
+
+    let mut newer = genuine.clone();
+    newer.package_record.version = VersionWithSource::from_str("9.9").unwrap();
+    let mut renamed = genuine.clone();
+    renamed.package_record.name = "shellcheck".parse().unwrap();
+    let mut rebuilt = genuine.clone();
+    rebuilt.package_record.build = "h60d57d3_1".parse().unwrap();
+    for record in [newer, renamed, rebuilt] {
+        let err = verify(&record).unwrap_err();
+        assert!(matches!(err, SigstoreError::RecordMismatch { .. }), "{err}");
+    }
+}
