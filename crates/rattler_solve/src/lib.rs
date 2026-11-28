@@ -173,7 +173,7 @@ pub enum TimestampExclusionReason {
     #[error("the package has no timestamp")]
     MissingTimestamp,
     /// The selected timestamp is strictly later than the effective cutoff.
-    #[error("the package is uploaded after the cutoff date of {}", cutoff.to_zoned(jiff::tz::TimeZone::system()).strftime("%Y-%m-%d %H:%M:%S"))]
+    #[error("the package is uploaded after the cutoff date of {}", cutoff.to_zoned_datetime(jiff::tz::TimeZone::system()).strftime("%Y-%m-%d %H:%M:%S"))]
     NewerThanCutoff {
         /// The effective package/channel cutoff.
         cutoff: Timestamp,

@@ -257,7 +257,7 @@ pub fn write_conda_package<W: Write + Seek>(
     let mut outer_archive = zip::ZipWriter::new(writer);
 
     let last_modified_time = if let Some(time) = timestamp {
-        let dt = time.to_zoned(TimeZone::UTC).datetime();
+        let dt = time.to_zoned_datetime(TimeZone::UTC).datetime();
         DateTime::from_date_and_time(
             dt.year() as u16,
             dt.month() as u8,

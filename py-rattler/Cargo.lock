@@ -2121,7 +2121,7 @@ dependencies = [
  "hex",
  "hmac 0.13.0",
  "http",
- "jiff",
+ "jiff 0.2.46",
  "reqwest",
  "rustc_version",
  "rustls",
@@ -2731,15 +2731,31 @@ version = "0.2.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175dc66334db3b9ab9985bf8b61cfed50dc16d20964bb47f9e479adcae984a7f"
 dependencies = [
- "jiff-core",
- "jiff-static",
- "jiff-tzdb-platform",
+ "jiff-core 0.1.8",
+ "jiff-static 0.2.46",
+ "jiff-tzdb-platform 0.1.3",
  "js-sys",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
  "wasm-bindgen",
+ "windows-link 0.2.1",
+]
+
+[[package]]
+name = "jiff"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "107f2e89536b6818514025f6787b0d94d819e54fe3b40365275fc753de485b3f"
+dependencies = [
+ "jiff-core 1.0.2",
+ "jiff-static 1.0.3",
+ "jiff-tzdb-platform 1.0.0",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
  "windows-link 0.2.1",
 ]
 
@@ -2753,15 +2769,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "jiff-core"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d44c923edf2bf456a982253f1a9ee1f6e89e421dffd0065d9b9a581da0def58f"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "jiff-static"
 version = "0.2.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7b1af7547d47354bc438d797e3854601bde8f8d185780c5ba4ab27afa54f1ba"
 dependencies = [
- "jiff-core",
+ "jiff-core 0.1.8",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "jiff-static"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4996f71e569e3a3e32b925c28ef8f0027dc30bb1d594b33eeda409eea185f5c8"
+dependencies = [
+ "jiff-core 1.0.2",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -2771,12 +2808,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0980fca2cc272465bd60e82397607ba9f33add9e48defd77923301bbd03808f2"
 
 [[package]]
+name = "jiff-tzdb"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12e71a1b68a875a44a33bb7a1dd84392cb77145a3367a552a3cfe6a4f5cf3afc"
+
+[[package]]
 name = "jiff-tzdb-platform"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
 dependencies = [
- "jiff-tzdb",
+ "jiff-tzdb 0.1.10",
+]
+
+[[package]]
+name = "jiff-tzdb-platform"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc65b284afcfa8f6cf189c7274c805505314a7ab975c60e1f548bff56525420e"
+dependencies = [
+ "jiff-tzdb 1.0.0",
 ]
 
 [[package]]
@@ -3238,7 +3290,7 @@ dependencies = [
  "bytes",
  "futures",
  "http",
- "jiff",
+ "jiff 0.2.46",
  "log",
  "md-5",
  "percent-encoding",
@@ -3727,7 +3779,7 @@ dependencies = [
  "futures",
  "hex",
  "http",
- "jiff",
+ "jiff 1.0.3",
  "nix 0.31.3",
  "openssl",
  "parking_lot 0.13.0",
@@ -3771,7 +3823,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "700d18fa267b73b9b521fd7e13580e2f446916f176cacee1ab63fcc8191f1655"
 dependencies = [
  "inventory",
- "jiff",
  "libc",
  "once_cell",
  "portable-atomic",
@@ -4011,7 +4062,7 @@ dependencies = [
  "indexmap 2.14.2",
  "indicatif",
  "itertools 0.15.0",
- "jiff",
+ "jiff 1.0.3",
  "memchr",
  "memmap2",
  "once_cell",
@@ -4097,7 +4148,7 @@ dependencies = [
  "hex",
  "indexmap 2.14.2",
  "itertools 0.15.0",
- "jiff",
+ "jiff 1.0.3",
  "lazy-regex",
  "memmap2",
  "nom",
@@ -4142,7 +4193,7 @@ dependencies = [
  "hex",
  "humantime",
  "indexmap 2.14.2",
- "jiff",
+ "jiff 1.0.3",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_solve",
@@ -4197,7 +4248,7 @@ dependencies = [
  "hex",
  "indexmap 2.14.2",
  "indicatif",
- "jiff",
+ "jiff 1.0.3",
  "opendal",
  "rattler_conda_types",
  "rattler_config",
@@ -4229,7 +4280,7 @@ dependencies = [
  "hex",
  "indexmap 2.14.2",
  "itertools 0.15.0",
- "jiff",
+ "jiff 1.0.3",
  "pep440_rs",
  "pep508_rs",
  "rattler_conda_types",
@@ -4343,7 +4394,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "http",
- "jiff",
+ "jiff 1.0.3",
  "pep440_rs",
  "rattler_conda_types",
  "rattler_digest",
@@ -4424,7 +4475,7 @@ dependencies = [
  "humantime",
  "indicatif",
  "itertools 0.15.0",
- "jiff",
+ "jiff 1.0.3",
  "js-sys",
  "libc",
  "memmap2",
@@ -4508,7 +4559,7 @@ dependencies = [
  "astral-reqwest-middleware",
  "futures",
  "hex",
- "jiff",
+ "jiff 1.0.3",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_redaction",
@@ -4530,7 +4581,7 @@ dependencies = [
  "futures",
  "hex",
  "itertools 0.15.0",
- "jiff",
+ "jiff 1.0.3",
  "rattler_conda_types",
  "resolvo",
  "serde",
@@ -4755,7 +4806,7 @@ dependencies = [
  "hex",
  "hmac 0.13.0",
  "http",
- "jiff",
+ "jiff 0.2.46",
  "log",
  "percent-encoding",
  "sha1 0.11.0",
@@ -5300,7 +5351,7 @@ dependencies = [
  "hex",
  "indexmap 1.9.3",
  "indexmap 2.14.2",
- "jiff",
+ "jiff 0.2.46",
  "schemars 0.9.0",
  "schemars 1.2.3",
  "serde_core",
@@ -5439,7 +5490,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98819125d96663ca27bc1b4fa06673da03de760f6b4d24596efd175e66ac3857"
 dependencies = [
- "jiff",
+ "jiff 0.2.46",
  "sigstore-types",
  "thiserror 2.0.21",
 ]
@@ -5454,7 +5505,7 @@ dependencies = [
  "const-oid 0.9.6",
  "der 0.7.10",
  "futures-io",
- "jiff",
+ "jiff 0.2.46",
  "rustls-pki-types",
  "sigstore-types",
  "spki 0.7.3",
@@ -5481,7 +5532,7 @@ checksum = "9abc878eed02e46c130bf5c2a48633144eb0a95ec93d47124bf51b931cf20e1f"
 dependencies = [
  "base64",
  "hex",
- "jiff",
+ "jiff 0.2.46",
  "serde",
  "serde_json",
  "sigstore-merkle",
@@ -5496,7 +5547,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6111e00e097bb764b6fe9e6205bce3d582c3594512450ee69837753f759c55e2"
 dependencies = [
  "directories",
- "jiff",
+ "jiff 0.2.46",
  "serde",
  "serde_json",
  "sigstore-crypto",
@@ -5516,7 +5567,7 @@ dependencies = [
  "const-oid 0.9.6",
  "der 0.7.10",
  "hex",
- "jiff",
+ "jiff 0.2.46",
  "rustls-pki-types",
  "rustls-webpki",
  "sigstore-crypto",
@@ -5534,7 +5585,7 @@ checksum = "0ef81a8257fcb3873e1e85f29d33d642f962c9faa7d69a05ac2c754dcd460301"
 dependencies = [
  "glob",
  "hex",
- "jiff",
+ "jiff 0.2.46",
  "reqwest",
  "serde",
  "serde_json",
@@ -5554,7 +5605,7 @@ checksum = "b4f0e9a87bcaf654b5d3b8540eaf78040cae72eb59157bb1765f56684fb0e3e9"
 dependencies = [
  "base64",
  "hex",
- "jiff",
+ "jiff 0.2.46",
  "pem",
  "serde",
  "serde_json",
@@ -5571,7 +5622,7 @@ dependencies = [
  "const-oid 0.9.6",
  "futures-io",
  "hex",
- "jiff",
+ "jiff 0.2.46",
  "rustls-pki-types",
  "rustls-webpki",
  "serde",

@@ -27,7 +27,7 @@ pty = ["rattler_pty", "nix"]
 
 [dependencies]
 anyhow = "1"
-jiff = { version = "0.2" }
+jiff = { version = "1.0" }
 futures = "0.3"
 parking_lot = { version = "0.13", features = ["arc_lock", "send_guard"] }
 
@@ -70,7 +70,6 @@ pyo3 = { version = "0.29", features = [
   "abi3-py310",
   "extension-module",
   "multiple-pymethods",
-  "jiff-02",
 ] }
 pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
 pythonize = "0.29"

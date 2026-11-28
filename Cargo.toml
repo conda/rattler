@@ -52,7 +52,7 @@ bytes = "1"
 bzip2 = "0.6"
 cache_control = "0.2"
 cfg-if = "1"
-jiff = { version = "0.2", default-features = false, features = ["std", "serde"] }
+jiff = { version = "1.0", default-features = false, features = ["std", "serde"] }
 clap = { version = "4", features = [
   "derive",
   "color",

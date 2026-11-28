@@ -298,8 +298,11 @@ async fn verify_real_bundle_offline() {
         .as_ref()
         .expect("a Fulcio signing certificate");
     assert_eq!(
-        certificate.not_after.duration_since(certificate.not_before),
-        jiff::SignedDuration::from_mins(10)
+        certificate
+            .not_after
+            .duration_since(certificate.not_before)
+            .as_secs(),
+        jiff::SignedDuration::from_mins(10).as_secs()
     );
 
     assert_eq!(attestation.log_index(), Some(1_202_156_555));

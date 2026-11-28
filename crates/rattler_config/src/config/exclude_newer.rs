@@ -397,7 +397,7 @@ fn parse_point_in_time(cutoff: &str) -> Option<Timestamp> {
     Date::strptime("%Y-%m-%d", cutoff)
         .ok()
         .and_then(|date| date.tomorrow().ok())
-        .and_then(|next_day| next_day.to_zoned(TimeZone::UTC).ok())
+        .and_then(|next_day| next_day.to_zoned_datetime(TimeZone::UTC).ok())
         .map(|next_day| next_day.timestamp())
 }
 

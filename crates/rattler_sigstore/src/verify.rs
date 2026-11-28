@@ -329,7 +329,10 @@ fn verify_bundle(
         index: 0,
         identity: outcome.identity().map(ToString::to_string),
         issuer: outcome.issuer().map(str::to_owned),
-        integrated_time: outcome.integrated_time(),
+        integrated_time: outcome.integrated_time().map(|ts| {
+            Timestamp::from_nanosecond(ts.as_nanosecond())
+                .expect("sigstore timestamp is within jiff::Timestamp range")
+        }),
         target_channel,
         certificate: outcome.certificate().cloned(),
         log_entry: bundle.verification_material.tlog_entries.first().cloned(),

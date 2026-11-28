@@ -84,7 +84,7 @@ impl FromStr for ExcludeNewer {
                 .map_err(|_date_error| ParseExcludeNewerError)?;
             let timestamp = next_day
                 .at(0, 0, 0, 0)
-                .to_zoned(TimeZone::UTC)
+                .to_zoned_datetime(TimeZone::UTC)
                 .map_err(|_timezone_error| ParseExcludeNewerError)?
                 .timestamp();
             return Ok(ExcludeNewer::Timestamp(timestamp));
