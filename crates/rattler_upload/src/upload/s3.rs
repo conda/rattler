@@ -9,6 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::bytes::BytesMut;
 use url::Url;
 
+use super::opt::{ForceOverwrite, S3Data, SkipExisting};
 use crate::upload::package::ExtractedPackage;
 
 /// Size of a single multipart chunk. S3 requires every part except the last to
@@ -21,39 +22,74 @@ const PART_CONCURRENCY: usize = 4;
 /// Number of packages that are uploaded concurrently.
 const PACKAGE_CONCURRENCY: usize = 4;
 
-/// Uploads a package to a channel in an S3 bucket.
-///
-/// The credential source must already be determined by the caller (e.g. via
-/// [`S3CredentialSource::resolve`] or [`S3CredentialSource::from_sdk`]).
-pub async fn upload_package_to_s3(
-    channel: Url,
-    credentials: S3CredentialSource,
-    package_files: &[PathBuf],
-    force: bool,
-) -> miette::Result<()> {
-    upload_package_to_s3_with_attestation(channel, credentials, package_files, None, force).await
+/// Status of a package upload operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackageUploadStatus {
+    /// The package was successfully uploaded.
+    Uploaded,
+    /// The package already exists and was skipped.
+    Skipped,
 }
 
-/// Uploads packages and an optional attestation sidecar to a channel in an S3
-/// bucket.
+/// Helper to handle `ConditionNotMatch` when uploading a package.
+fn handle_condition_mismatch(
+    bucket: &str,
+    channel: &Url,
+    key: &str,
+    skip_existing: SkipExisting,
+) -> miette::Result<PackageUploadStatus> {
+    if skip_existing.is_enabled() {
+        tracing::info!(
+            "Skip existing package: s3://{bucket}{}/{key}",
+            channel.path().to_string()
+        );
+        Ok(PackageUploadStatus::Skipped)
+    } else {
+        miette::bail!(
+            "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite or --skip-existing to skip.",
+            channel.path().to_string()
+        );
+    }
+}
+
+/// Uploads packages to a channel in an S3 bucket.
 ///
-/// The attestation must be the complete sidecar: a non-empty JSON array of
-/// Sigstore bundles. It can only be supplied when uploading exactly one
-/// package. The immutable content-addressed sidecar is published before the
-/// mutable discovery sidecar.
-pub async fn upload_package_to_s3_with_attestation(
-    channel: Url,
+/// An optional attestation sidecar can be configured in [`S3Data`]. The attestation
+/// must be the complete sidecar: a non-empty JSON array of Sigstore bundles. It can
+/// only be supplied when uploading exactly one package. The immutable content-addressed
+/// sidecar is published before the mutable discovery sidecar, and sidecars are only
+/// published on an actual package upload (never when skipped).
+pub async fn upload_package_to_s3(
     credentials: S3CredentialSource,
     package_files: &[PathBuf],
-    attestation: Option<&Path>,
-    force: bool,
+    s3_data: S3Data,
 ) -> miette::Result<()> {
-    if attestation.is_some() && package_files.len() != 1 {
+    let bucket = s3_data
+        .channel
+        .host_str()
+        .ok_or_else(|| miette::miette!("No bucket in S3 URL"))?
+        .to_string();
+
+    let op = credentials
+        .opendal_operator(&bucket, s3_data.channel.path())
+        .into_diagnostic()?;
+
+    upload_package_to_s3_inner(&op, &bucket, package_files, s3_data).await
+}
+
+/// Inner upload logic shared by `upload_package_to_s3` and unit tests.
+async fn upload_package_to_s3_inner(
+    op: &Operator,
+    bucket: &str,
+    package_files: &[PathBuf],
+    s3_data: S3Data,
+) -> miette::Result<()> {
+    if s3_data.attestation.is_some() && package_files.len() != 1 {
         miette::bail!("an attestation can only be uploaded with exactly one package");
     }
 
     // Validate and read the sidecar before changing any remote state.
-    let attestation = match attestation {
+    let attestation = match s3_data.attestation.as_deref() {
         Some(path) => {
             let bytes = fs_err::tokio::read(path).await.into_diagnostic()?;
             validate_attestation_sidecar(&bytes)?;
@@ -62,21 +98,18 @@ pub async fn upload_package_to_s3_with_attestation(
         None => None,
     };
 
-    let bucket = channel
-        .host_str()
-        .ok_or(miette::miette!("No bucket in S3 URL"))?;
-
-    let op = credentials
-        .opendal_operator(bucket, channel.path())
-        .into_diagnostic()?;
-
     // Upload multiple packages concurrently. Each individual package upload also
     // streams its chunks concurrently (see `upload_single_package`).
-    futures::stream::iter(package_files.iter())
+    let upload_statuses = futures::stream::iter(package_files.iter())
         .map(|package_file| {
             let op = op.clone();
-            let channel = &channel;
-            async move { upload_single_package(&op, channel, bucket, package_file, force).await }
+            let channel = &s3_data.channel;
+            let force = s3_data.force;
+            let skip_existing = s3_data.skip_existing;
+            async move {
+                upload_single_package(&op, channel, bucket, package_file, force, skip_existing)
+                    .await
+            }
         })
         .buffer_unordered(PACKAGE_CONCURRENCY)
         .collect::<Vec<_>>()
@@ -84,7 +117,10 @@ pub async fn upload_package_to_s3_with_attestation(
         .into_iter()
         .collect::<miette::Result<Vec<_>>>()?;
 
-    if let Some(attestation) = attestation {
+    // Only publish the attestation sidecar if the package was actually uploaded.
+    if let (Some(attestation), Some(&PackageUploadStatus::Uploaded)) =
+        (attestation, upload_statuses.first())
+    {
         let package = ExtractedPackage::from_package_file(&package_files[0])?;
         let subdir = package
             .subdir()
@@ -94,7 +130,7 @@ pub async fn upload_package_to_s3_with_attestation(
             .ok_or_else(|| miette::miette!("Failed to get filename"))?;
         let mutable_key = format!("{subdir}/{filename}.sigs");
 
-        publish_attestation_sidecar(&op, &mutable_key, attestation).await?;
+        publish_attestation_sidecar(op, &mutable_key, attestation).await?;
     }
 
     Ok(())
@@ -156,8 +192,9 @@ async fn upload_single_package(
     channel: &Url,
     bucket: &str,
     package_file: &Path,
-    force: bool,
-) -> miette::Result<()> {
+    force: ForceOverwrite,
+    skip_existing: SkipExisting,
+) -> miette::Result<PackageUploadStatus> {
     let package = ExtractedPackage::from_package_file(package_file)?;
     let subdir = package
         .subdir()
@@ -193,7 +230,7 @@ async fn upload_single_package(
         .chunk(DESIRED_CHUNK_SIZE)
         .concurrent(PART_CONCURRENCY)
         .content_disposition(&format!("attachment; filename={filename}"))
-        .if_not_exists(!force)
+        .if_not_exists(!force.is_enabled())
         .user_metadata([
             (String::from("package-sha256"), hex::encode(sha256hash)),
             (String::from("package-md5"), hex::encode(md5hash)),
@@ -201,10 +238,7 @@ async fn upload_single_package(
         .await
     {
         Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
-            miette::bail!(
-                "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite.",
-                channel.path().to_string()
-            );
+            return handle_condition_mismatch(bucket, channel, &key, skip_existing);
         }
         Ok(writer) => writer,
         Err(e) => {
@@ -238,30 +272,30 @@ async fn upload_single_package(
 
     match writer.close().await {
         Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
-            miette::bail!(
-                "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite.",
-                channel.path().to_string()
-            );
+            handle_condition_mismatch(bucket, channel, &key, skip_existing)
         }
         Ok(_) => {
             tracing::info!(
                 "Uploaded package to s3://{bucket}{}/{key}",
                 channel.path().to_string()
             );
+            Ok(PackageUploadStatus::Uploaded)
         }
-        Err(e) => {
-            return Err(e).into_diagnostic();
-        }
+        Err(e) => Err(e).into_diagnostic(),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use opendal::services::Fs;
+    use url::Url;
 
-    use super::{publish_attestation_sidecar, validate_attestation_sidecar};
+    use super::{
+        PackageUploadStatus, publish_attestation_sidecar, upload_package_to_s3_inner,
+        upload_single_package, validate_attestation_sidecar,
+    };
+    use crate::upload::opt::{ForceOverwrite, S3Data, SkipExisting};
+    use crate::upload::package::ExtractedPackage;
 
     #[test]
     fn validates_attestation_sidecar_container() {
@@ -296,5 +330,177 @@ mod tests {
         publish_attestation_sidecar(&op, mutable_key, bytes)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_upload_single_package_skip_existing() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let op =
+            opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap())).unwrap();
+        let channel = Url::parse("s3://test-bucket/my-channel").unwrap();
+        let bucket = "test-bucket";
+        let package_path = crate::upload::test_utils::test_package_path();
+
+        // First write succeeds
+        let status = upload_single_package(
+            &op,
+            &channel,
+            bucket,
+            &package_path,
+            ForceOverwrite(false),
+            SkipExisting(false),
+        )
+        .await
+        .unwrap();
+        assert_eq!(status, PackageUploadStatus::Uploaded);
+
+        // Second write fails without flag
+        let err = upload_single_package(
+            &op,
+            &channel,
+            bucket,
+            &package_path,
+            ForceOverwrite(false),
+            SkipExisting(false),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+        assert!(err.to_string().contains("--skip-existing"));
+
+        // Second write succeeds with skip_existing
+        let status = upload_single_package(
+            &op,
+            &channel,
+            bucket,
+            &package_path,
+            ForceOverwrite(false),
+            SkipExisting(true),
+        )
+        .await
+        .unwrap();
+        assert_eq!(status, PackageUploadStatus::Skipped);
+    }
+
+    #[tokio::test]
+    async fn test_s3_upload_skip_existing_with_attestation() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let op =
+            opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap())).unwrap();
+        let channel = Url::parse("s3://test-bucket/my-channel").unwrap();
+        let bucket = "test-bucket";
+        let package_path = crate::upload::test_utils::test_package_path();
+
+        // Create two different valid attestation files
+        let attestation_path1 = temp_dir.path().join("sidecar1.sigs");
+        let attestation_path2 = temp_dir.path().join("sidecar2.sigs");
+        std::fs::write(&attestation_path1, br#"[{"bundle": 1}]"#).unwrap();
+        std::fs::write(&attestation_path2, br#"[{"bundle": 2}]"#).unwrap();
+
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+        let subdir = package.subdir().unwrap();
+        let filename = package.filename().unwrap();
+        let mutable_key = format!("{subdir}/{filename}.sigs");
+
+        // 1. Initial upload with attestation 1 succeeds and publishes sidecar
+        let s3_data1 = S3Data::new(
+            channel.clone(),
+            Some(attestation_path1),
+            ForceOverwrite(false),
+            SkipExisting(false),
+        );
+        upload_package_to_s3_inner(&op, bucket, std::slice::from_ref(&package_path), s3_data1)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            op.read(&mutable_key).await.unwrap().to_bytes(),
+            br#"[{"bundle": 1}]"#.as_slice()
+        );
+
+        // 2. Second upload with skip_existing and attestation 2: package is skipped,
+        // and attestation sidecar must NOT be overwritten!
+        let s3_data2 = S3Data::new(
+            channel,
+            Some(attestation_path2),
+            ForceOverwrite(false),
+            SkipExisting(true),
+        );
+        upload_package_to_s3_inner(&op, bucket, std::slice::from_ref(&package_path), s3_data2)
+            .await
+            .unwrap();
+
+        // Verify sidecar still contains bundle 1 (not bundle 2)
+        assert_eq!(
+            op.read(&mutable_key).await.unwrap().to_bytes(),
+            br#"[{"bundle": 1}]"#.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_s3_opts_skip_existing() {
+        use crate::upload::opt::S3Opts;
+        use clap::Parser;
+
+        let opts_default =
+            S3Opts::try_parse_from(["s3", "--channel", "s3://test-bucket/test"]).unwrap();
+        assert!(!opts_default.skip_existing);
+
+        let opts_skip = S3Opts::try_parse_from([
+            "s3",
+            "--channel",
+            "s3://test-bucket/test",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts_skip.skip_existing);
+
+        let opts_skip_alias = S3Opts::try_parse_from([
+            "s3",
+            "--channel",
+            "s3://test-bucket/test",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts_skip_alias.skip_existing);
+
+        let opts_skip_short =
+            S3Opts::try_parse_from(["s3", "--channel", "s3://test-bucket/test", "-s"]).unwrap();
+        assert!(opts_skip_short.skip_existing);
+
+        // Verify conflict with --force
+        let err_force_skip = S3Opts::try_parse_from([
+            "s3",
+            "--channel",
+            "s3://test-bucket/test",
+            "--force",
+            "--skip-existing",
+        ])
+        .unwrap_err();
+        assert_eq!(
+            err_force_skip.kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
+
+        let err_force_alias = S3Opts::try_parse_from([
+            "s3",
+            "--channel",
+            "s3://test-bucket/test",
+            "--force",
+            "--skip-if-exists",
+        ])
+        .unwrap_err();
+        assert_eq!(
+            err_force_alias.kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
+
+        let err_force_short =
+            S3Opts::try_parse_from(["s3", "--channel", "s3://test-bucket/test", "--force", "-s"])
+                .unwrap_err();
+        assert_eq!(
+            err_force_short.kind(),
+            clap::error::ErrorKind::ArgumentConflict
+        );
     }
 }
